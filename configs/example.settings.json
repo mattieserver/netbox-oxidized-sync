@@ -1,7 +1,8 @@
 {
     "netbox": {
         "base_url": "http://localhost:8000",
-        "api_key": "xxxx-xxxx-xxxx"
+        "api_key": "xxxx-xxxx-xxxx",
+        "roles": ""
     },
     "oxidized": {
         "base_url": "http://localhost:8001",

@@ -8,7 +8,10 @@ import (
 	"net/http"
 )
 
-type OxidizedNodes []struct {
+type OxidizedNodes []OxidizedNode
+
+
+type OxidizedNode struct {
 	Name     string `json:"name"`
 	FullName string `json:"full_name"`
 	IP       string `json:"ip"`
