@@ -17,8 +17,6 @@ type netboxResult struct {
 	Results  json.RawMessage `json:"results"`
 }
 
-type NetboxDevices []NetboxDevice
-
 type NetboxDevice struct {
 	ID         int    `json:"id"`
 	URL        string `json:"url"`
@@ -120,14 +118,14 @@ type NetboxDevice struct {
 	InventoryItemCount     int       `json:"inventory_item_count"`
 }
 
-type NetboxHttpClient struct {
+type NetboxHTTPClient struct {
 	apikey      string
 	baseurl     string
 	client      http.Client
 	rolesfilter string
 }
 
-func NewNetbox(baseurl string, apikey string, roles string) NetboxHttpClient {
+func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{Transport: customTransport}
@@ -146,12 +144,12 @@ func NewNetbox(baseurl string, apikey string, roles string) NetboxHttpClient {
 		rolesfilter = sb.String()
 	}
 
-	e := NetboxHttpClient{apikey, baseurl, *client, rolesfilter}
+	e := NetboxHTTPClient{apikey, baseurl, *client, rolesfilter}
 	return e
 }
 
-func loopApiRequest(path string, e *NetboxHttpClient) netboxResult {
-	resBody, err := TokenAuthHttpGet(path, e.apikey, &e.client)
+func loopAPIRequest(path string, e *NetboxHTTPClient) netboxResult {
+	resBody, err := TokenAuthHTTPGet(path, e.apikey, &e.client)
 	if err != nil {
 		log.Println("Something went wrong during http request")
 	}
@@ -164,34 +162,33 @@ func loopApiRequest(path string, e *NetboxHttpClient) netboxResult {
 	return data
 }
 
-func apiRequest[T NetboxDevices](path string, e *NetboxHttpClient) []T {
+func apiRequest[T NetboxDevice](path string, e *NetboxHTTPClient) []T {
 	netboxResult := []T{}
 	reachedAll := false
 	url := path
 
 	for !reachedAll {
-		data := loopApiRequest(url, e)
+		data := loopAPIRequest(url, e)
 
-		var actualResult T
+		var actualResult []T
 		json.Unmarshal(data.Results, &actualResult)
 
-		netboxResult = append(netboxResult, actualResult)
+		netboxResult = append(netboxResult, actualResult...)
 
 		if data.Next != "" {
 			url = data.Next
 		} else {
 			reachedAll = true
 		}
-
 	}
 	return netboxResult
 }
 
-func (e *NetboxHttpClient) GetAllDevices() []NetboxDevices {
+func (e *NetboxHTTPClient) GetAllDevices() []NetboxDevice {
 	requestURL := fmt.Sprintf("%s/%s", e.baseurl, "api/dcim/devices/")
 	if e.rolesfilter != "" {
 		requestURL = fmt.Sprintf("%s%s", requestURL, e.rolesfilter)
 	}
-	devices := apiRequest[NetboxDevices](requestURL, e)
+	devices := apiRequest[NetboxDevice](requestURL, e)
 	return devices
 }

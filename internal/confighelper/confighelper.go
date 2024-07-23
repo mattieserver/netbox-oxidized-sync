@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 )
 
-type config struct {
+type Config struct {
 	Netbox struct {
 		BaseURL string `json:"base_url"`
 		APIKey  string `json:"api_key"`
@@ -19,13 +19,13 @@ type config struct {
 	} `json:"oxidized"`
 }
 
-func ReadConfig() config {
+func ReadConfig() Config {
     f, err := os.ReadFile("configs/settings.json")
     if err != nil {
         log.Println(err)
     }
 
-    var data config
+    var data Config
 	json.Unmarshal([]byte(f), &data)
 
 	return data

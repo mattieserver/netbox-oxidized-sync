@@ -31,29 +31,29 @@ type OxidizedNode struct {
 	Time   string `json:"time"`
 }
 
-type OxidizedHttpClient struct {
+type OxidizedHTTPClient struct {
 	username string
 	password string
 	baseurl  string
 	client   http.Client
 }
 
-func NewOxidized(baseurl string, username string, password string) OxidizedHttpClient {
+func NewOxidized(baseurl string, username string, password string) OxidizedHTTPClient {
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{Transport: customTransport}
 
-	e := OxidizedHttpClient{username, password, baseurl, *client}
+	e := OxidizedHTTPClient{username, password, baseurl, *client}
 	return e
 }
 
-func (e *OxidizedHttpClient) basicAuth() string {
+func (e *OxidizedHTTPClient) basicAuth() string {
 	auth := e.username + ":" + e.password
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-func (e *OxidizedHttpClient) GetAllNodes() OxidizedNodes {
-	resBody, err := BasicAuthHttpGet(e.baseurl, "nodes?format=json", e.basicAuth(), &e.client)
+func (e *OxidizedHTTPClient) GetAllNodes() OxidizedNodes {
+	resBody, err := BasicAuthHTTPGet(e.baseurl, "nodes?format=json", e.basicAuth(), &e.client)
 	if err != nil {
 		log.Println("Something went wrong during http request")
 	}

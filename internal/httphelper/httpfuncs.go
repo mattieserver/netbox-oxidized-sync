@@ -7,7 +7,7 @@ import (
 )
 
 
-func BasicAuthHttpGet(baseurl string, path string, basicauth string, client *http.Client) ([]byte, error) {
+func BasicAuthHTTPGet(baseurl string, path string, basicauth string, client *http.Client) ([]byte, error) {
 	requestURL := fmt.Sprintf("%s/%s", baseurl, path)
 	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 	req.Header.Add("Authorization", "Basic "+ basicauth)
@@ -18,7 +18,7 @@ func BasicAuthHttpGet(baseurl string, path string, basicauth string, client *htt
 	return httpGet(req, client)
 }
 
-func TokenAuthHttpGet(fullurl string, token string, client *http.Client) ([]byte, error) {
+func TokenAuthHTTPGet(fullurl string, token string, client *http.Client) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, fullurl, nil)
 	req.Header.Add("Authorization", "Token "+ token)
 	if err != nil {
@@ -30,15 +30,18 @@ func TokenAuthHttpGet(fullurl string, token string, client *http.Client) ([]byte
 
 func httpGet(req *http.Request, client *http.Client) ([]byte, error) {
 	res, err := client.Do(req)
+	
 	if err != nil {
 		return nil, fmt.Errorf("error making http request: %s", err)
 	}
 
+	defer res.Body.Close()
+
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("could not read response body: %s", err)
+	}	
 
-	}
 	if res.StatusCode == http.StatusOK {
 		return resBody, nil
 	}
