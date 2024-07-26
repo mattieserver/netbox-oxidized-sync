@@ -6,10 +6,11 @@ import (
 	"strconv"
 
 	"github.com/mattieserver/netbox-oxidized-sync/internal/confighelper"
+	"github.com/mattieserver/netbox-oxidized-sync/internal/configparser"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/httphelper"
 )
 
-func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]httphelper.NetboxDevice) {
+func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]httphelper.NetboxDevice, oxidizedhttp *httphelper.OxidizedHTTPClient) {
 	for j := range jobs {
 		log.Printf("Got oxided device: '%s' on worker %s",j.Name, strconv.Itoa(id), )
 
@@ -18,6 +19,17 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 			log.Printf("Device: '%s' not found in netbox", j.Name)
 		} else {
 			log.Printf("Device: '%s' found in netbox", j.Name)
+			config := oxidizedhttp.GetNodeConfig(j.FullName)
+
+			switch j.Model {
+			case "IOS":
+				log.Println("IOS not supported for now")
+			case "FortiOS":
+				log.Printf("Device: '%s' has fortiOS", j.Name)
+				configparser.ParseFortiOSConfig(&config)
+			default:
+				log.Printf("Model '%s' currently not supported", j.Model)
+			}
 		}
 
 		results <- id * 2
@@ -37,7 +49,7 @@ func loadOxidizedDevices(oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp
 	results := make(chan int, len(nodes))
 
 	for w := 1; w <= 3; w++ {
-		go worker(w, jobs, results, &devices)
+		go worker(w, jobs, results, &devices, oxidizedhttp)
 	}
 
 	for _, element := range nodes { 

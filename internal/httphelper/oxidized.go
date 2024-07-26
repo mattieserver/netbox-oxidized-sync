@@ -4,12 +4,10 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 )
-
-type OxidizedNodes []OxidizedNode
-
 
 type OxidizedNode struct {
 	Name     string `json:"name"`
@@ -52,13 +50,26 @@ func (e *OxidizedHTTPClient) basicAuth() string {
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-func (e *OxidizedHTTPClient) GetAllNodes() OxidizedNodes {
+
+func (e *OxidizedHTTPClient) GetNodeConfig(nodeFullname string) []string {
+	path := fmt.Sprintf("%s/%s?format=json", "node/fetch", nodeFullname)
+	resBody, err := BasicAuthHTTPGet(e.baseurl, path, e.basicAuth(), &e.client)
+
+	var node []string	
+	json.Unmarshal(resBody, &node)
+	if err != nil {
+		log.Println("Error:", err)
+	}
+	return node
+}
+
+func (e *OxidizedHTTPClient) GetAllNodes() []OxidizedNode {
 	resBody, err := BasicAuthHTTPGet(e.baseurl, "nodes?format=json", e.basicAuth(), &e.client)
 	if err != nil {
 		log.Println("Something went wrong during http request")
 	}
 
-	var nodes OxidizedNodes	
+	var nodes []OxidizedNode	
 	json.Unmarshal(resBody, &nodes)
 	if err != nil {
 		log.Println("Error:", err)
