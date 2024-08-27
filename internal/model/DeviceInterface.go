@@ -1,35 +1,27 @@
 package model
 
 
-type deviceInterface struct {
+type FortigateInterfaces struct {
+	AggregationPorts []AggregationDeviceInterface
+	PhysicalPorts []PhysicalDeviceInterface
+	Vlans []VirtualDeviceInterface
+}
+
+type AggregationDeviceInterface struct {
 	Name string
-	deviceType int
+	Members []string
+	Description string
 }
 
-func (i *deviceInterface)SetType(dType string) {
-	i.deviceType = TypeMapper(dType)
+type PhysicalDeviceInterface struct {
+	Name string
+	Speed string
+	Description string
 }
 
-func NewDeviceInterface() deviceInterface {
-	dInterface := deviceInterface{}
-	dInterface.SetType("no")
-	return dInterface
-}
-
-func TypeMapper(dType string) int {
-	switch dType {
-	case "vlan":
-		return 1
-	default:
-		return 0
-	}	
-}
-
-func TypeMapperReverse(dType int) string {
-	switch dType {
-	case 1:
-		return "vlan"
-	default:
-		return "unkown"
-	}	
+type VirtualDeviceInterface struct {
+	Name string
+	VlanId string
+	Parent string
+	Description string
 }

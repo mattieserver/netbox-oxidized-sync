@@ -2,8 +2,10 @@ package configparser
 
 import (
 	"bufio"
-	"log/slog"
+	"fmt"
 	"strings"
+
+	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 	intefaceMember                 = "        set member "
 )
 
-func ParseFortiOSConfig(config *string) error {
+func ParseFortiOSConfig(config *string) (*model.FortigateInterfaces, error) {
 	const (
 		start = "config system interface"
 		end   = "end"
@@ -42,12 +44,14 @@ func ParseFortiOSConfig(config *string) error {
 		}
 	}
 
-	parseInterfaces(configInterfaces)
+	deviceInterfaces := parseInterfaces(configInterfaces)
 
-	return nil
+	return deviceInterfaces, nil
 }
 
-func parseInterfaces(interfaces []string) {
+func parseInterfaces(interfaces []string) *model.FortigateInterfaces {
+
+	var deviceInterfaces model.FortigateInterfaces
 
 	var (
 		configInterface         []string
@@ -65,7 +69,7 @@ func parseInterfaces(interfaces []string) {
 		if strings.HasPrefix(element, "    next") {
 			if configInterfaceTracking {
 				configInterfaceTracking = false
-				parseSingleInterface(configInterface)
+				parseSingleInterface(configInterface, &deviceInterfaces)
 			}
 			continue
 		}
@@ -74,13 +78,15 @@ func parseInterfaces(interfaces []string) {
 			configInterface = append(configInterface, element)
 		}
 	}
+
+	return &deviceInterfaces
 }
 
 func getElementValue(element string, filter string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(element, filter, ""), "\"", "")
 }
 
-func parseSingleInterface(interfaceData []string) {
+func parseSingleInterface(interfaceData []string, results *model.FortigateInterfaces) {
 
 	var name, interfaceType, vlanId, parentName, alias, vdom, ip, speed, member string
 
@@ -104,22 +110,55 @@ func parseSingleInterface(interfaceData []string) {
 		}
 	}
 
-	slog.Info(name)
-	slog.Info(interfaceType)
-	if interfaceType == "vlan" {
-		slog.Info("vlan")
-	} else {
-		if interfaceType == "aggregate" {
-			slog.Info("agg")
+	switch interfaceType {
+	case "aggregate":
+		var aggr model.AggregationDeviceInterface
+		aggr.Name = name
+		memberNames := strings.Split(member, " ")
+		aggr.Members = append(aggr.Members, memberNames...)
+		aggr.Description = createDescription(alias, vdom)
+		results.AggregationPorts = append(results.AggregationPorts, aggr)
+	case "physical":
+		var pyh model.PhysicalDeviceInterface
+		pyh.Name = name
+		pyh.Speed = speed
+		pyh.Description = createDescription(alias, vdom)
+		results.PhysicalPorts = append(results.PhysicalPorts, pyh)
+	case "vlan":
+		results.Vlans = append(results.Vlans, createVlan(name, alias, vdom, vlanId, parentName))
+	case "":
+		if vlanId != "" {
+			results.Vlans = append(results.Vlans, createVlan(name, alias, vdom, vlanId, parentName))
 		}
 	}
-
-	slog.Info(vlanId)
-	slog.Info(parentName)
-	slog.Info(alias)
-	slog.Info(vdom)
-	if speed != "" {
-		slog.Info(speed)
-	}
-
 }
+
+func createVlan(name string, alias string, vdom string, vlanId string, parentName string) model.VirtualDeviceInterface {
+	var vid model.VirtualDeviceInterface
+	vid.Name = name
+	vid.Description = createDescription(alias, vdom)
+	vid.VlanId = vlanId
+	vid.Parent = parentName
+	return vid
+}
+
+func createDescription(alias string, vdom string) string {
+	var result string
+	if vdom != "" {
+		createDescriptionBuilder(vdom, "vdom", &result)
+	}
+	if alias != "" {
+		createDescriptionBuilder(alias, "alias", &result)
+	}
+	return result
+}
+
+func createDescriptionBuilder(value string, name string, result *string) {
+	if *result != "" {
+		*result = fmt.Sprintf("%s; %s: %s", *result, name, value)
+	} else {
+		*result = fmt.Sprintf("%s: %s", name, value)
+	}
+}
+
+

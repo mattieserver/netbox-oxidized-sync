@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+
 )
 
 type netboxResult struct {
@@ -15,6 +17,68 @@ type netboxResult struct {
 	Next     string          `json:"next"`
 	Previous string          `json:"previous"`
 	Results  json.RawMessage `json:"results"`
+}
+
+type NetboxInterface struct {
+	ID      int    `json:"id"`
+	URL     string `json:"url"`
+	Display string `json:"display"`
+	Device  struct {
+		ID          int    `json:"id"`
+		URL         string `json:"url"`
+		Display     string `json:"display"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	} `json:"device"`
+	Vdcs   []interface{} `json:"vdcs"`
+	Module interface{}   `json:"module"`
+	Name   string        `json:"name"`
+	Label  string        `json:"label"`
+	Type   struct {
+		Value string `json:"value"`
+		Label string `json:"label"`
+	} `json:"type"`
+	Enabled                     bool          `json:"enabled"`
+	Parent                      interface{}   `json:"parent"`
+	Bridge                      interface{}   `json:"bridge"`
+	Lag                         interface{}   `json:"lag"`
+	Mtu                         interface{}   `json:"mtu"`
+	MacAddress                  interface{}   `json:"mac_address"`
+	Speed                       interface{}   `json:"speed"`
+	Duplex                      interface{}   `json:"duplex"`
+	Wwn                         interface{}   `json:"wwn"`
+	MgmtOnly                    bool          `json:"mgmt_only"`
+	Description                 string        `json:"description"`
+	Mode                        interface{}   `json:"mode"`
+	RfRole                      interface{}   `json:"rf_role"`
+	RfChannel                   interface{}   `json:"rf_channel"`
+	PoeMode                     interface{}   `json:"poe_mode"`
+	PoeType                     interface{}   `json:"poe_type"`
+	RfChannelFrequency          interface{}   `json:"rf_channel_frequency"`
+	RfChannelWidth              interface{}   `json:"rf_channel_width"`
+	TxPower                     interface{}   `json:"tx_power"`
+	UntaggedVlan                interface{}   `json:"untagged_vlan"`
+	TaggedVlans                 []interface{} `json:"tagged_vlans"`
+	MarkConnected               bool          `json:"mark_connected"`
+	Cable                       interface{}   `json:"cable"`
+	CableEnd                    string        `json:"cable_end"`
+	WirelessLink                interface{}   `json:"wireless_link"`
+	LinkPeers                   []interface{} `json:"link_peers"`
+	LinkPeersType               interface{}   `json:"link_peers_type"`
+	WirelessLans                []interface{} `json:"wireless_lans"`
+	Vrf                         interface{}   `json:"vrf"`
+	L2VpnTermination            interface{}   `json:"l2vpn_termination"`
+	ConnectedEndpoints          interface{}   `json:"connected_endpoints"`
+	ConnectedEndpointsType      interface{}   `json:"connected_endpoints_type"`
+	ConnectedEndpointsReachable interface{}   `json:"connected_endpoints_reachable"`
+	Tags                        []interface{} `json:"tags"`
+	CustomFields                struct {
+	} `json:"custom_fields"`
+	Created          time.Time `json:"created"`
+	LastUpdated      time.Time `json:"last_updated"`
+	CountIpaddresses int       `json:"count_ipaddresses"`
+	CountFhrpGroups  int       `json:"count_fhrp_groups"`
+	Occupied         bool      `json:"_occupied"`
 }
 
 type NetboxDevice struct {
@@ -118,6 +182,10 @@ type NetboxDevice struct {
 	InventoryItemCount     int       `json:"inventory_item_count"`
 }
 
+type netboxData interface {
+	NetboxInterface | NetboxDevice
+}
+
 type NetboxHTTPClient struct {
 	apikey      string
 	baseurl     string
@@ -162,7 +230,7 @@ func loopAPIRequest(path string, e *NetboxHTTPClient) netboxResult {
 	return data
 }
 
-func apiRequest[T NetboxDevice](path string, e *NetboxHTTPClient) []T {
+func apiRequest[T netboxData](path string, e *NetboxHTTPClient) []T {
 	netboxResult := []T{}
 	reachedAll := false
 	url := path
@@ -190,5 +258,11 @@ func (e *NetboxHTTPClient) GetAllDevices() []NetboxDevice {
 		requestURL = fmt.Sprintf("%s%s", requestURL, e.rolesfilter)
 	}
 	devices := apiRequest[NetboxDevice](requestURL, e)
+	return devices
+}
+
+func (e *NetboxHTTPClient) GetIntefacesForDevice(deviceId string) []NetboxInterface {
+	requestURL := fmt.Sprintf("%s/%s%s", e.baseurl, "api/dcim/interfaces/?device_id=", deviceId)
+	devices := apiRequest[NetboxInterface](requestURL, e)
 	return devices
 }

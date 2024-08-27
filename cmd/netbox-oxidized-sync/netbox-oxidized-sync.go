@@ -8,9 +8,10 @@ import (
 	"github.com/mattieserver/netbox-oxidized-sync/internal/confighelper"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/configparser"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/httphelper"
+	"github.com/mattieserver/netbox-oxidized-sync/internal/netboxparser"
 )
 
-func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]httphelper.NetboxDevice, oxidizedhttp *httphelper.OxidizedHTTPClient) {
+func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]httphelper.NetboxDevice, oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp *httphelper.NetboxHTTPClient) {
 	for j := range jobs {
 		log.Printf("Got oxided device: '%s' on worker %s",j.Name, strconv.Itoa(id), )
 
@@ -26,7 +27,11 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				log.Println("IOS not supported for now")
 			case "FortiOS":
 				log.Printf("Device: '%s' has fortiOS", j.Name)
-				configparser.ParseFortiOSConfig(&config)
+				fortigateInterfaces,_ := configparser.ParseFortiOSConfig(&config)
+				var netboxDevice = (*netboxdevices)[idx]
+				netboxInterfaceForDevice := netboxhttp.GetIntefacesForDevice(strconv.Itoa(netboxDevice.ID))
+				netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice)
+				
 			default:
 				log.Printf("Model '%s' currently not supported", j.Model)
 			}
@@ -49,7 +54,7 @@ func loadOxidizedDevices(oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp
 	results := make(chan int, len(nodes))
 
 	for w := 1; w <= 3; w++ {
-		go worker(w, jobs, results, &devices, oxidizedhttp)
+		go worker(w, jobs, results, &devices, oxidizedhttp, netboxhttp)
 	}
 
 	for _, element := range nodes { 
