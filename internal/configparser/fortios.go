@@ -3,6 +3,7 @@ package configparser
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
@@ -18,9 +19,10 @@ const (
 	interfaceIp                    = "        set ip "
 	interfaceSpeed                 = "        set speed "
 	intefaceMember                 = "        set member "
+	interfaceStatus                = "        set status "
 )
 
-func ParseFortiOSConfig(config *string) (*model.FortigateInterfaces, error) {
+func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
 	const (
 		start = "config system interface"
 		end   = "end"
@@ -49,9 +51,9 @@ func ParseFortiOSConfig(config *string) (*model.FortigateInterfaces, error) {
 	return deviceInterfaces, nil
 }
 
-func parseInterfaces(interfaces []string) *model.FortigateInterfaces {
+func parseInterfaces(interfaces []string) *[]model.FortigateInterface {
 
-	var deviceInterfaces model.FortigateInterfaces
+	var deviceInterfaces []model.FortigateInterface
 
 	var (
 		configInterface         []string
@@ -86,9 +88,9 @@ func getElementValue(element string, filter string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(element, filter, ""), "\"", "")
 }
 
-func parseSingleInterface(interfaceData []string, results *model.FortigateInterfaces) {
+func parseSingleInterface(interfaceData []string, results *[]model.FortigateInterface) {
 
-	var name, interfaceType, vlanId, parentName, alias, vdom, ip, speed, member string
+	var name, interfaceType, vlanId, parentName, alias, vdom, ip, speed, member, status string
 
 	prefixes := map[string]*string{
 		interfaceNamePrefix:            &name,
@@ -100,6 +102,7 @@ func parseSingleInterface(interfaceData []string, results *model.FortigateInterf
 		interfaceIp:                    &ip,
 		interfaceSpeed:                 &speed,
 		intefaceMember:                 &member,
+		interfaceStatus:                &status,
 	}
 
 	for _, element := range interfaceData {
@@ -112,29 +115,36 @@ func parseSingleInterface(interfaceData []string, results *model.FortigateInterf
 
 	switch interfaceType {
 	case "aggregate":
-		var aggr model.AggregationDeviceInterface
+		var aggr model.FortigateInterface
+		aggr.InterfaceType = "aggregate"
 		aggr.Name = name
 		memberNames := strings.Split(member, " ")
 		aggr.Members = append(aggr.Members, memberNames...)
 		aggr.Description = createDescription(alias, vdom)
-		results.AggregationPorts = append(results.AggregationPorts, aggr)
+		aggr.Status = status
+		*results = append(*results, aggr)
 	case "physical":
-		var pyh model.PhysicalDeviceInterface
+		var pyh model.FortigateInterface
+		pyh.InterfaceType = "physical"
 		pyh.Name = name
 		pyh.Speed = speed
+		pyh.Status = status
 		pyh.Description = createDescription(alias, vdom)
-		results.PhysicalPorts = append(results.PhysicalPorts, pyh)
+		*results = append(*results, pyh)
 	case "vlan":
-		results.Vlans = append(results.Vlans, createVlan(name, alias, vdom, vlanId, parentName))
+		*results = append(*results, createVlan(name, alias, vdom, vlanId, parentName))
+	case "loopback":
+		slog.Warn("loopback interface; todo")
 	case "":
 		if vlanId != "" {
-			results.Vlans = append(results.Vlans, createVlan(name, alias, vdom, vlanId, parentName))
+			*results = append(*results, createVlan(name, alias, vdom, vlanId, parentName))
 		}
 	}
 }
 
-func createVlan(name string, alias string, vdom string, vlanId string, parentName string) model.VirtualDeviceInterface {
-	var vid model.VirtualDeviceInterface
+func createVlan(name string, alias string, vdom string, vlanId string, parentName string) model.FortigateInterface {
+	var vid model.FortigateInterface
+	vid.InterfaceType = "vlan"
 	vid.Name = name
 	vid.Description = createDescription(alias, vdom)
 	vid.VlanId = vlanId
@@ -160,5 +170,3 @@ func createDescriptionBuilder(value string, name string, result *string) {
 		*result = fmt.Sprintf("%s: %s", name, value)
 	}
 }
-
-

@@ -1,27 +1,12 @@
 package model
 
-
-type FortigateInterfaces struct {
-	AggregationPorts []AggregationDeviceInterface
-	PhysicalPorts []PhysicalDeviceInterface
-	Vlans []VirtualDeviceInterface
-}
-
-type AggregationDeviceInterface struct {
+type FortigateInterface struct {
 	Name string
 	Members []string
 	Description string
-}
-
-type PhysicalDeviceInterface struct {
-	Name string
+	Status string
 	Speed string
-	Description string
-}
-
-type VirtualDeviceInterface struct {
-	Name string
 	VlanId string
 	Parent string
-	Description string
+	InterfaceType string
 }

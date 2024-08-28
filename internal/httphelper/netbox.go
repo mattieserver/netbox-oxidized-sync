@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-
 )
 
 type netboxResult struct {
@@ -38,10 +36,23 @@ type NetboxInterface struct {
 		Value string `json:"value"`
 		Label string `json:"label"`
 	} `json:"type"`
-	Enabled                     bool          `json:"enabled"`
-	Parent                      interface{}   `json:"parent"`
-	Bridge                      interface{}   `json:"bridge"`
-	Lag                         interface{}   `json:"lag"`
+	Enabled bool        `json:"enabled"`
+	Parent  interface{} `json:"parent"`
+	Bridge  interface{} `json:"bridge"`
+	Lag     struct {
+		ID      int    `json:"id"`
+		URL     string `json:"url"`
+		Display string `json:"display"`
+		Device  struct {
+			ID      int    `json:"id"`
+			URL     string `json:"url"`
+			Display string `json:"display"`
+			Name    string `json:"name"`
+		} `json:"device"`
+		Name     string      `json:"name"`
+		Cable    interface{} `json:"cable"`
+		Occupied bool        `json:"_occupied"`
+	} `json:"lag"`
 	Mtu                         interface{}   `json:"mtu"`
 	MacAddress                  interface{}   `json:"mac_address"`
 	Speed                       interface{}   `json:"speed"`
