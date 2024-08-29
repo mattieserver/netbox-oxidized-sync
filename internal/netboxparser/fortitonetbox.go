@@ -1,33 +1,23 @@
 package netboxparser
 
 import (
-	"log/slog"
 	"strconv"
 	"strings"
 
-	"github.com/mattieserver/netbox-oxidized-sync/internal/httphelper"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
 )
 
-type NetboxInterfaceUpdateCreate struct {
-	DeviceId       string
-	PortType       string
-	PortTypeUpdate string
-	Name           string
-	Status         string
-	Description    string
-	Mode           string
-	Parent         string
-}
 
-func processPort(port model.FortigateInterface, allMembers map[string]int, fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]httphelper.NetboxInterface) NetboxInterfaceUpdateCreate {
-	var matched NetboxInterfaceUpdateCreate
+
+func processPort(port model.FortigateInterface, allMembers map[string]int, fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]model.NetboxInterface) model.NetboxInterfaceUpdateCreate {
+	var matched model.NetboxInterfaceUpdateCreate
 	for _, netboxInterface := range *netboxDeviceInterfaces {
 		if strings.EqualFold(port.Name, netboxInterface.Name) {
-			matched = NetboxInterfaceUpdateCreate{
+			matched = model.NetboxInterfaceUpdateCreate{
 				DeviceId: strconv.Itoa(netboxInterface.Device.ID),
 				Name:     port.Name,
 				PortType: port.InterfaceType,
+				InterfaceId: strconv.Itoa(netboxInterface.ID),
 			}
 
 			if port.InterfaceType == "aggregate" && netboxInterface.Type.Value != "lag" {
@@ -47,6 +37,20 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 					}
 				}
 			}
+			if port.InterfaceType == "vlan" {
+				if port.Parent != "" {
+					matched.Parent = port.Parent
+				}
+				if netboxInterface.Mode.Value != "access" {
+					matched.VlanMode = "access"
+				}
+				if netboxInterface.Type.Value != "virtual" {
+					matched.PortTypeUpdate = "virtual"
+				}
+				if port.VlanId != strconv.Itoa(netboxInterface.UntaggedVlan.Vid) {
+					matched.VlanId = port.VlanId
+				}
+			}
 			if port.Status != "" {
 				if port.Status == "down" && netboxInterface.Enabled {
 					matched.Status = "disabled"
@@ -58,22 +62,22 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 		}
 	}
 
-	if matched == (NetboxInterfaceUpdateCreate{}) {
+	if matched == (model.NetboxInterfaceUpdateCreate{}) {
 		if port.InterfaceType == "phy" && port.Name != "modem" && !strings.HasPrefix(port.Name, "npu") {
 			matched.Mode = "create"
 		} else if port.InterfaceType == "agg" && len(port.Members) > 0 {
 			matched.Mode = "create"
 		}
 	} else {
-		if matched.Description != "" || matched.Status != "" || matched.PortTypeUpdate != "" || matched.Parent != "" {
+		if matched.Description != "" || matched.Status != "" || matched.PortTypeUpdate != "" || matched.Parent != "" || matched.VlanMode != "" {
 			matched.Mode = "update"
 		}
 	}
 	return matched
 }
 
-func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]httphelper.NetboxInterface) {
-	var results []NetboxInterfaceUpdateCreate
+func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]model.NetboxInterface)  []model.NetboxInterfaceUpdateCreate{
+	var results []model.NetboxInterfaceUpdateCreate
 
 	allMembers := make(map[string]int)
 	for i, aggPort := range *fortiInterfaces {
@@ -82,14 +86,12 @@ func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netbo
 		}
 	}
 
-	slog.Info(strconv.Itoa(len(allMembers)))	
-
 	for _, port := range *fortiInterfaces {
 		result := processPort(port, allMembers, fortiInterfaces, netboxDeviceInterfaces)
 		if result.Mode != "" {
 			results = append(results, result)
 		}
-	}	
+	}
 
-	slog.Info(strconv.Itoa(len(results)))
+	return results
 }

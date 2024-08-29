@@ -20,6 +20,7 @@ const (
 	interfaceSpeed                 = "        set speed "
 	intefaceMember                 = "        set member "
 	interfaceStatus                = "        set status "
+	interfaceDescription           = "        set description "
 )
 
 func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
@@ -90,7 +91,7 @@ func getElementValue(element string, filter string) string {
 
 func parseSingleInterface(interfaceData []string, results *[]model.FortigateInterface) {
 
-	var name, interfaceType, vlanId, parentName, alias, vdom, ip, speed, member, status string
+	var name, interfaceType, vlanId, parentName, alias, vdom, ip, speed, member, status, description string
 
 	prefixes := map[string]*string{
 		interfaceNamePrefix:            &name,
@@ -103,6 +104,7 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 		interfaceSpeed:                 &speed,
 		intefaceMember:                 &member,
 		interfaceStatus:                &status,
+		interfaceDescription:           &description,
 	}
 
 	for _, element := range interfaceData {
@@ -120,7 +122,7 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 		aggr.Name = name
 		memberNames := strings.Split(member, " ")
 		aggr.Members = append(aggr.Members, memberNames...)
-		aggr.Description = createDescription(alias, vdom)
+		aggr.Description = createDescription(alias, vdom, description)
 		aggr.Status = status
 		*results = append(*results, aggr)
 	case "physical":
@@ -129,30 +131,30 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 		pyh.Name = name
 		pyh.Speed = speed
 		pyh.Status = status
-		pyh.Description = createDescription(alias, vdom)
+		pyh.Description = createDescription(alias, vdom, description)
 		*results = append(*results, pyh)
 	case "vlan":
-		*results = append(*results, createVlan(name, alias, vdom, vlanId, parentName))
+		*results = append(*results, createVlan(name, alias, vdom, vlanId, parentName, description))
 	case "loopback":
 		slog.Warn("loopback interface; todo")
 	case "":
 		if vlanId != "" {
-			*results = append(*results, createVlan(name, alias, vdom, vlanId, parentName))
+			*results = append(*results, createVlan(name, alias, vdom, vlanId, parentName, description))
 		}
 	}
 }
 
-func createVlan(name string, alias string, vdom string, vlanId string, parentName string) model.FortigateInterface {
+func createVlan(name string, alias string, vdom string, vlanId string, parentName string, description string) model.FortigateInterface {
 	var vid model.FortigateInterface
 	vid.InterfaceType = "vlan"
 	vid.Name = name
-	vid.Description = createDescription(alias, vdom)
+	vid.Description = createDescription(alias, vdom, description)
 	vid.VlanId = vlanId
 	vid.Parent = parentName
 	return vid
 }
 
-func createDescription(alias string, vdom string) string {
+func createDescription(alias string, vdom string, description string) string {
 	var result string
 	if vdom != "" {
 		createDescriptionBuilder(vdom, "vdom", &result)
@@ -160,6 +162,10 @@ func createDescription(alias string, vdom string) string {
 	if alias != "" {
 		createDescriptionBuilder(alias, "alias", &result)
 	}
+	if description != "" {
+		createDescriptionBuilder(description, "desc", &result)
+	}
+
 	return result
 }
 

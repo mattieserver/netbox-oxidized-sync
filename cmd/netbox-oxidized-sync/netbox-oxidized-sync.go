@@ -8,14 +8,15 @@ import (
 	"github.com/mattieserver/netbox-oxidized-sync/internal/confighelper"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/configparser"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/httphelper"
+	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
 	"github.com/mattieserver/netbox-oxidized-sync/internal/netboxparser"
 )
 
-func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]httphelper.NetboxDevice, oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp *httphelper.NetboxHTTPClient) {
+func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]model.NetboxDevice, oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp *httphelper.NetboxHTTPClient) {
 	for j := range jobs {
 		log.Printf("Got oxided device: '%s' on worker %s",j.Name, strconv.Itoa(id), )
 
-		idx := slices.IndexFunc(*netboxdevices, func(c httphelper.NetboxDevice) bool { return c.Name == j.Name })
+		idx := slices.IndexFunc(*netboxdevices, func(c model.NetboxDevice) bool { return c.Name == j.Name })
 		if idx == -1 {
 			log.Printf("Device: '%s' not found in netbox", j.Name)
 		} else {
@@ -30,7 +31,8 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				fortigateInterfaces,_ := configparser.ParseFortiOSConfig(&config)
 				var netboxDevice = (*netboxdevices)[idx]
 				netboxInterfaceForDevice := netboxhttp.GetIntefacesForDevice(strconv.Itoa(netboxDevice.ID))
-				netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice)
+				interfacesToUpdate := netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice)
+				netboxhttp.UpdateOrCreateInferface(interfacesToUpdate)
 				
 			default:
 				log.Printf("Model '%s' currently not supported", j.Model)

@@ -1,6 +1,7 @@
 package httphelper
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +16,7 @@ func BasicAuthHTTPGet(baseurl string, path string, basicauth string, client *htt
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}
 
-	return httpGet(req, client)
+	return httpDo(req, client)
 }
 
 func TokenAuthHTTPGet(fullurl string, token string, client *http.Client) ([]byte, error) {
@@ -25,10 +26,22 @@ func TokenAuthHTTPGet(fullurl string, token string, client *http.Client) ([]byte
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}
 
-	return httpGet(req, client)
+	return httpDo(req, client)
 }
 
-func httpGet(req *http.Request, client *http.Client) ([]byte, error) {
+func TokenAuthHTTPPatch(fullurl string, token string, client *http.Client, jsonbody []byte) ([]byte, error) {
+	bodyReader := bytes.NewReader(jsonbody)
+	req, err := http.NewRequest(http.MethodPatch, fullurl, bodyReader)
+	req.Header.Add("Authorization", "Token "+ token)
+	req.Header.Add("Content-Type", "application/json")
+	if err != nil {
+		return nil, fmt.Errorf("could not create request: %s", err)
+	}
+
+	return httpDo(req, client)
+}
+
+func httpDo(req *http.Request, client *http.Client) ([]byte, error) {
 	res, err := client.Do(req)
 	
 	if err != nil {
@@ -48,3 +61,5 @@ func httpGet(req *http.Request, client *http.Client) ([]byte, error) {
 	return nil, fmt.Errorf("http status was not 200")
 
 }
+
+
