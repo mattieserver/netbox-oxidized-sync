@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
@@ -21,7 +22,18 @@ type netboxResult struct {
 
 type interfacePatchData struct {
 	Description string `json:"description,omitempty"`
-	Enabled *bool        `json:"enabled,omitempty"`
+	Enabled     *bool  `json:"enabled,omitempty"`
+	Parent      int    `json:"parent,omitempty"`
+	Lag         int    `json:"lag,omitempty"`
+	InterfaceType string `json:"type,omitempty"`
+}
+
+type interfacePostData struct {
+	Device        int    `json:"device"`
+	Name          string `json:"name"`
+	InterfaceType string `json:"type"`
+	Description   string `json:"description,omitempty"`
+	Enabled       *bool  `json:"enabled,omitempty"`
 }
 
 type netboxData interface {
@@ -109,43 +121,145 @@ func (e *NetboxHTTPClient) GetIntefacesForDevice(deviceId string) []model.Netbox
 	return devices
 }
 
-func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces []model.NetboxInterfaceUpdateCreate) {
+func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreate) {
 	t := new(bool)
-    f := new(bool)
+	f := new(bool)
 
 	*t = true
-    *f = false
+	*f = false
 
-	for _, port := range interfaces {
+	var patchData interfacePatchData
+
+	if port.Parent != "" {
+		if port.ParentId != "" {
+			if port.PortType == "physical" {
+				patchData.Lag, _ = strconv.Atoi(port.ParentId)
+			} else {
+				patchData.Parent, _ = strconv.Atoi(port.ParentId)
+			}
+
+		} else {
+			slog.Warn("todo")
+		}
+	}
+
+	if port.Description != "" {
+		if len(port.Description) >= 200 {
+			slog.Warn("Description is to long")
+		} else {
+			patchData.Description = port.Description
+		}
+
+	}
+	if port.Status != "" {
+		if port.Status == "disabled" {
+			patchData.Enabled = f
+		}
+		if port.Status == "enabled" {
+			patchData.Enabled = t
+		}
+	}
+
+	if port.PortTypeUpdate != "" {
+		if port.PortTypeUpdate == "virtual" {
+			patchData.InterfaceType = "virtual"
+		}
+	}
+
+	data, _ := json.Marshal(patchData)
+	requestURL := fmt.Sprintf("%s/%s%s/", e.baseurl, "api/dcim/interfaces/", port.InterfaceId)
+	_, err := TokenAuthHTTPPatch(requestURL, e.apikey, &e.client, data)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+}
+
+func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreate) {
+	t := new(bool)
+	f := new(bool)
+
+	*t = true
+	*f = false
+
+	var postData interfacePostData
+
+	postData.Name = port.Name
+	postData.Device, _ = strconv.Atoi(port.DeviceId)
+
+	if port.PortType == "aggregate" {
+		postData.InterfaceType = "lag"
+	}
+
+	if port.PortType == "physical" {
+		postData.InterfaceType = "1000base-t"
+	}
+
+	if port.Status != "" {
+		if port.Status == "disabled" {
+			postData.Enabled = f
+		}
+		if port.Status == "enabled" {
+			postData.Enabled = t
+		}
+	}
+
+	if port.Description != "" {
+		if len(port.Description) >= 200 {
+			slog.Warn("Description is to long")
+		} else {
+			postData.Description = port.Description
+		}
+	}
+
+	data, _ := json.Marshal(postData)
+	requestURL := fmt.Sprintf("%s/%s", e.baseurl, "api/dcim/interfaces/")
+	_, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+}
+
+func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces []model.NetboxInterfaceUpdateCreate) {
+	var devicesWithParent []model.NetboxInterfaceUpdateCreate
+	var lagInterfaces []model.NetboxInterfaceUpdateCreate
+	var standalone []model.NetboxInterfaceUpdateCreate
+
+	for _, iface := range interfaces {
+		if iface.Parent != "" {
+			devicesWithParent = append(devicesWithParent, iface)
+			continue
+		}
+		if iface.PortType == "aggregate" {
+			lagInterfaces = append(lagInterfaces, iface)
+			continue
+		}
+		standalone = append(standalone, iface)
+	}
+
+	for _, port := range lagInterfaces {
+		if port.Mode == "create" {
+			e.createInterface(port)
+		}
 		if port.Mode == "update" {
-			var patchData interfacePatchData
-			if port.PortType != "vlan" {
-				slog.Info(port.Name)
-			}
+			e.updateInterface(port)
+		}
+	}
 
-			if port.Description != "" {
-				if len(port.Description) >= 200{
-					slog.Warn("Description is to lang")
-				} else {
-					patchData.Description = port.Description
-				}
-				
-			}
-			if port.Status != "" {
-				if port.Status == "disabled" {
-					patchData.Enabled = f
-				}
-				if port.Status == "enabled" {
-					patchData.Enabled = t
-				}
-			}
+	for _, port := range devicesWithParent {
+		if port.Mode == "create" {
+			e.createInterface(port)
+		}
+		if port.Mode == "update" {
+			e.updateInterface(port)
+		}
+	}
 
-			data,_ := json.Marshal(patchData)
-			requestURL := fmt.Sprintf("%s/%s%s/", e.baseurl, "api/dcim/interfaces/", port.InterfaceId)
-			_, err := TokenAuthHTTPPatch(requestURL, e.apikey, &e.client, data)
-			if err != nil {
-				slog.Error(err.Error())
-			}
+	for _, port := range standalone {
+		if port.Mode == "create" {
+			e.createInterface(port)
+		}
+		if port.Mode == "update" {
+			e.updateInterface(port)
 		}
 	}
 }

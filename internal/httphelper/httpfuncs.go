@@ -29,6 +29,18 @@ func TokenAuthHTTPGet(fullurl string, token string, client *http.Client) ([]byte
 	return httpDo(req, client)
 }
 
+func TokenAuthHTTPPost(fullurl string, token string, client *http.Client, jsonbody []byte) ([]byte, error) {
+	bodyReader := bytes.NewReader(jsonbody)
+	req, err := http.NewRequest(http.MethodPost, fullurl, bodyReader)
+	req.Header.Add("Authorization", "Token "+ token)
+	req.Header.Add("Content-Type", "application/json")
+	if err != nil {
+		return nil, fmt.Errorf("could not create request: %s", err)
+	}
+
+	return httpDo(req, client)
+}
+
 func TokenAuthHTTPPatch(fullurl string, token string, client *http.Client, jsonbody []byte) ([]byte, error) {
 	bodyReader := bytes.NewReader(jsonbody)
 	req, err := http.NewRequest(http.MethodPatch, fullurl, bodyReader)

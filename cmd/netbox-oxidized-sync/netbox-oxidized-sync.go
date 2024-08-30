@@ -31,7 +31,7 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				fortigateInterfaces,_ := configparser.ParseFortiOSConfig(&config)
 				var netboxDevice = (*netboxdevices)[idx]
 				netboxInterfaceForDevice := netboxhttp.GetIntefacesForDevice(strconv.Itoa(netboxDevice.ID))
-				interfacesToUpdate := netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice)
+				interfacesToUpdate := netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice, strconv.Itoa(netboxDevice.ID))
 				netboxhttp.UpdateOrCreateInferface(interfacesToUpdate)
 				
 			default:

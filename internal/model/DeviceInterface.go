@@ -208,7 +208,9 @@ type NetboxInterfaceUpdateCreate struct {
 	Description    string
 	Mode           string
 	Parent         string
+	ParentId         string
 	VlanMode       string
 	VlanId         string
 	InterfaceId    string
+
 }

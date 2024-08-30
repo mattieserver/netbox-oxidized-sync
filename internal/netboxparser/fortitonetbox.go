@@ -7,16 +7,24 @@ import (
 	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
 )
 
+func getParentID(parentName string, netboxDeviceInterfaces *[]model.NetboxInterface) string {
+	for _, netboxParentInterface := range *netboxDeviceInterfaces {
+		if strings.EqualFold(netboxParentInterface.Name, parentName) {
+			return strconv.Itoa(netboxParentInterface.ID)
+		}
+	}
+	return ""
+}
 
-
-func processPort(port model.FortigateInterface, allMembers map[string]int, fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]model.NetboxInterface) model.NetboxInterfaceUpdateCreate {
+func processPort(port model.FortigateInterface, allMembers map[string]int, fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]model.NetboxInterface, deviceId string) model.NetboxInterfaceUpdateCreate {
 	var matched model.NetboxInterfaceUpdateCreate
 	for _, netboxInterface := range *netboxDeviceInterfaces {
+
 		if strings.EqualFold(port.Name, netboxInterface.Name) {
 			matched = model.NetboxInterfaceUpdateCreate{
-				DeviceId: strconv.Itoa(netboxInterface.Device.ID),
-				Name:     port.Name,
-				PortType: port.InterfaceType,
+				DeviceId:    deviceId,
+				Name:        port.Name,
+				PortType:    port.InterfaceType,
 				InterfaceId: strconv.Itoa(netboxInterface.ID),
 			}
 
@@ -35,12 +43,17 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 							matched.Parent = (*fortiInterfaces)[parentIndex].Name
 						}
 					}
+					if matched.Parent != "" {
+						matched.ParentId = getParentID(matched.Parent, netboxDeviceInterfaces)
+					}
 				}
 			}
 			if port.InterfaceType == "vlan" {
 				if port.Parent != "" {
 					matched.Parent = port.Parent
+					matched.ParentId = getParentID(matched.Parent, netboxDeviceInterfaces)
 				}
+
 				if netboxInterface.Mode.Value != "access" {
 					matched.VlanMode = "access"
 				}
@@ -63,10 +76,35 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 	}
 
 	if matched == (model.NetboxInterfaceUpdateCreate{}) {
-		if port.InterfaceType == "phy" && port.Name != "modem" && !strings.HasPrefix(port.Name, "npu") {
+		if port.InterfaceType == "physical" && port.Name != "modem" && !strings.HasPrefix(port.Name, "npu") {
 			matched.Mode = "create"
-		} else if port.InterfaceType == "agg" && len(port.Members) > 0 {
-			matched.Mode = "create"
+			matched.Name = port.Name
+			matched.DeviceId = deviceId
+			matched.Description = port.Description
+			matched.PortType = port.InterfaceType
+			if port.Status != "" {
+				if port.Status == "down" {
+					matched.Status = "disabled"
+				} else {
+					matched.Status = "enabled"
+				}
+			}
+		} else if port.InterfaceType == "aggregate" && len(port.Members) > 0 {
+			if len(port.Members) != 1 && port.Members[0] != "" {
+				matched.Mode = "create"
+				matched.PortType = port.InterfaceType
+				matched.Name = port.Name
+				matched.DeviceId = deviceId
+				matched.Description = port.Description
+				matched.Status = port.Status
+				if port.Status != "" {
+					if port.Status == "down" {
+						matched.Status = "disabled"
+					} else {
+						matched.Status = "enabled"
+					}
+				}
+			}
 		}
 	} else {
 		if matched.Description != "" || matched.Status != "" || matched.PortTypeUpdate != "" || matched.Parent != "" || matched.VlanMode != "" {
@@ -76,7 +114,7 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 	return matched
 }
 
-func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]model.NetboxInterface)  []model.NetboxInterfaceUpdateCreate{
+func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netboxDeviceInterfaces *[]model.NetboxInterface, deviceId string) []model.NetboxInterfaceUpdateCreate {
 	var results []model.NetboxInterfaceUpdateCreate
 
 	allMembers := make(map[string]int)
@@ -87,7 +125,7 @@ func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netbo
 	}
 
 	for _, port := range *fortiInterfaces {
-		result := processPort(port, allMembers, fortiInterfaces, netboxDeviceInterfaces)
+		result := processPort(port, allMembers, fortiInterfaces, netboxDeviceInterfaces, deviceId)
 		if result.Mode != "" {
 			results = append(results, result)
 		}
