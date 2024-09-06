@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"slices"
 	"strconv"
 
@@ -31,8 +32,12 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				fortigateInterfaces,_ := configparser.ParseFortiOSConfig(&config)
 				var netboxDevice = (*netboxdevices)[idx]
 				netboxInterfaceForDevice := netboxhttp.GetIntefacesForDevice(strconv.Itoa(netboxDevice.ID))
+				netboxVlansForSite, err := netboxhttp.GetVlansForSite(strconv.Itoa(netboxDevice.Site.ID))
+				if err != nil {
+					continue
+				}
 				interfacesToUpdate := netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice, strconv.Itoa(netboxDevice.ID))
-				netboxhttp.UpdateOrCreateInferface(interfacesToUpdate)
+				netboxhttp.UpdateOrCreateInferface(&interfacesToUpdate, &netboxVlansForSite, netboxDevice.Site.ID, netboxDevice.Tenant.ID)
 				
 			default:
 				log.Printf("Model '%s' currently not supported", j.Model)

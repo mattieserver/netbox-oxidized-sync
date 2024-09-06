@@ -38,7 +38,11 @@ func TokenAuthHTTPPost(fullurl string, token string, client *http.Client, jsonbo
 		return nil, fmt.Errorf("could not create request: %s", err)
 	}
 
-	return httpDo(req, client)
+	resbody, err := httpDo(req, client)
+	if err != nil {
+		return nil, err
+	}
+	return resbody, nil
 }
 
 func TokenAuthHTTPPatch(fullurl string, token string, client *http.Client, jsonbody []byte) ([]byte, error) {
@@ -69,7 +73,11 @@ func httpDo(req *http.Request, client *http.Client) ([]byte, error) {
 
 	if res.StatusCode == http.StatusOK {
 		return resBody, nil
-	}
+	} else {
+		if req.Method == http.MethodPost && res.StatusCode == http.StatusCreated{
+			return resBody, nil
+		}
+	}	
 	return nil, fmt.Errorf("http status was not 200")
 
 }

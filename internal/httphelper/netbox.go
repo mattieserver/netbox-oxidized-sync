@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -21,11 +20,13 @@ type netboxResult struct {
 }
 
 type interfacePatchData struct {
-	Description string `json:"description,omitempty"`
-	Enabled     *bool  `json:"enabled,omitempty"`
-	Parent      int    `json:"parent,omitempty"`
-	Lag         int    `json:"lag,omitempty"`
+	Description   string `json:"description,omitempty"`
+	Enabled       *bool  `json:"enabled,omitempty"`
+	Parent        int    `json:"parent,omitempty"`
+	Lag           int    `json:"lag,omitempty"`
 	InterfaceType string `json:"type,omitempty"`
+	Mode          string `json:"mode,omitempty"`
+	UntaggedVlan  int    `json:"untagged_vlan,omitempty"`
 }
 
 type interfacePostData struct {
@@ -34,10 +35,21 @@ type interfacePostData struct {
 	InterfaceType string `json:"type"`
 	Description   string `json:"description,omitempty"`
 	Enabled       *bool  `json:"enabled,omitempty"`
+	UntaggedVlan  int    `json:"untagged_vlan,omitempty"`
+	Mode          string `json:"mode,omitempty"`
+	Parent        int    `json:"parent,omitempty"`
+	Lag           int    `json:"lag,omitempty"`
+}
+
+type vlanPostData struct {
+	SiteId   int    `json:"site,omitempty"`
+	TenantId int    `json:"tenant,omitempty"`
+	VlanId   int    `json:"vid"`
+	Name     string `json:"name"`
 }
 
 type netboxData interface {
-	model.NetboxInterface | model.NetboxDevice
+	model.NetboxInterface | model.NetboxDevice | model.NetboxVlan
 }
 
 type NetboxHTTPClient struct {
@@ -70,30 +82,36 @@ func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
 	return e
 }
 
-func loopAPIRequest(path string, e *NetboxHTTPClient) netboxResult {
+func loopAPIRequest(path string, e *NetboxHTTPClient) (netboxResult, error) {
 	resBody, err := TokenAuthHTTPGet(path, e.apikey, &e.client)
 	if err != nil {
-		log.Println("Something went wrong during http request")
+		return netboxResult{}, fmt.Errorf("Something went wrong during http reques: %s", err)
 	}
 
 	var data netboxResult
-	json.Unmarshal(resBody, &data)
+	err = json.Unmarshal(resBody, &data)
 	if err != nil {
-		log.Println("Error:", err)
+		return netboxResult{}, fmt.Errorf("Error during Unmarshal: %s", err)
 	}
-	return data
+	return data, nil
 }
 
-func apiRequest[T netboxData](path string, e *NetboxHTTPClient) []T {
+func apiRequest[T netboxData](path string, e *NetboxHTTPClient) ([]T, error) {
 	netboxResult := []T{}
 	reachedAll := false
 	url := path
 
 	for !reachedAll {
-		data := loopAPIRequest(url, e)
+		data, err := loopAPIRequest(url, e)
+		if err != nil {
+			return []T{}, err
+		}
 
 		var actualResult []T
-		json.Unmarshal(data.Results, &actualResult)
+		err = json.Unmarshal(data.Results, &actualResult)
+		if err != nil {
+			return []T{}, fmt.Errorf("Error during Unmarshal of sub type: %s", err)
+		}
 
 		netboxResult = append(netboxResult, actualResult...)
 
@@ -103,25 +121,66 @@ func apiRequest[T netboxData](path string, e *NetboxHTTPClient) []T {
 			reachedAll = true
 		}
 	}
-	return netboxResult
+	return netboxResult, nil
 }
 
 func (e *NetboxHTTPClient) GetAllDevices() []model.NetboxDevice {
-	requestURL := fmt.Sprintf("%s/%s", e.baseurl, "api/dcim/devices/")
+	requestURL := fmt.Sprintf("%s/api/dcim/devices/", e.baseurl)
 	if e.rolesfilter != "" {
 		requestURL = fmt.Sprintf("%s%s", requestURL, e.rolesfilter)
 	}
-	devices := apiRequest[model.NetboxDevice](requestURL, e)
+	devices, _ := apiRequest[model.NetboxDevice](requestURL, e)
 	return devices
 }
 
 func (e *NetboxHTTPClient) GetIntefacesForDevice(deviceId string) []model.NetboxInterface {
-	requestURL := fmt.Sprintf("%s/%s%s", e.baseurl, "api/dcim/interfaces/?device_id=", deviceId)
-	devices := apiRequest[model.NetboxInterface](requestURL, e)
+	requestURL := fmt.Sprintf("%s/api/dcim/interfaces/?device_id=%s", e.baseurl, deviceId)
+	devices, _ := apiRequest[model.NetboxInterface](requestURL, e)
 	return devices
 }
 
-func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreate) {
+func (e *NetboxHTTPClient) GetVlansForSite(siteId string) ([]model.NetboxVlan, error) {
+	requestURL := fmt.Sprintf("%s/api/ipam/vlans/?site_id=%s", e.baseurl, siteId)
+	vlans, err := apiRequest[model.NetboxVlan](requestURL, e)
+	if err != nil {
+		return []model.NetboxVlan{}, err
+	}
+	return vlans, nil
+}
+
+func getNetboxVlanInternalID(vlans *[]model.NetboxVlan, vid int) int {
+	for _, vlan := range *vlans {
+		if vlan.Vid == vid {
+			return vlan.ID
+		}
+	}
+	return 0
+}
+
+func (e *NetboxHTTPClient) createVlan(SiteId int, TenantId int, VlanId int, Name string) model.NetboxVlan {
+	var postData vlanPostData
+	postData.Name = Name
+	postData.SiteId = SiteId
+	postData.VlanId = VlanId
+	postData.TenantId = TenantId
+
+	data, _ := json.Marshal(postData)
+	requestURL := fmt.Sprintf("%s/api/ipam/vlans/", e.baseurl)
+	resBody, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+
+	var result model.NetboxVlan
+	err = json.Unmarshal(resBody, &result)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+	return result
+
+}
+
+func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreate, netboxVlansForSite *[]model.NetboxVlan, netboxSiteId int, netboxTenantId int) {
 	t := new(bool)
 	f := new(bool)
 
@@ -139,7 +198,9 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 			}
 
 		} else {
-			slog.Warn("todo")
+			if !strings.HasPrefix(port.Parent, "npu") {
+				slog.Info("Parent interface does not exist yet ")
+			}
 		}
 	}
 
@@ -165,6 +226,20 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 			patchData.InterfaceType = "virtual"
 		}
 	}
+	if port.VlanMode != "" {
+		patchData.Mode = port.VlanMode
+	}
+
+	if port.VlanId != "" {
+		vid, _ := strconv.Atoi(port.VlanId)
+		netboxVlanId := getNetboxVlanInternalID(netboxVlansForSite, vid)
+		if netboxVlanId != 0 {
+			patchData.UntaggedVlan = netboxVlanId
+		} else {
+			vlan := e.createVlan(netboxSiteId, netboxTenantId, vid, port.Name)
+			*netboxVlansForSite = append(*netboxVlansForSite, vlan)
+		}
+	}
 
 	data, _ := json.Marshal(patchData)
 	requestURL := fmt.Sprintf("%s/%s%s/", e.baseurl, "api/dcim/interfaces/", port.InterfaceId)
@@ -172,9 +247,10 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 	if err != nil {
 		slog.Error(err.Error())
 	}
+
 }
 
-func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreate) {
+func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreate, netboxVlansForSite *[]model.NetboxVlan, netboxSiteId int, netboxTenantId int) {
 	t := new(bool)
 	f := new(bool)
 
@@ -182,12 +258,30 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 	*f = false
 
 	var postData interfacePostData
-
 	postData.Name = port.Name
 	postData.Device, _ = strconv.Atoi(port.DeviceId)
 
 	if port.PortType == "aggregate" {
 		postData.InterfaceType = "lag"
+	}
+
+	if port.PortType == "vlan" {
+		postData.InterfaceType = "virtual"
+	}
+
+	if port.VlanId != "" {
+		vid, _ := strconv.Atoi(port.VlanId)
+		netboxVlanId := getNetboxVlanInternalID(netboxVlansForSite, vid)
+		if netboxVlanId != 0 {
+			postData.UntaggedVlan = netboxVlanId
+		} else {
+			vlan := e.createVlan(netboxSiteId, netboxTenantId, vid, port.Name)
+			*netboxVlansForSite = append(*netboxVlansForSite, vlan)
+		}
+
+		if port.VlanMode != "" {
+			postData.Mode = port.VlanMode
+		}
 	}
 
 	if port.PortType == "physical" {
@@ -211,20 +305,36 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 		}
 	}
 
+	if port.Parent != "" {
+		if port.ParentId != "" {
+			if port.PortType == "physical" {
+				postData.Lag, _ = strconv.Atoi(port.ParentId)
+			} else {
+				postData.Parent, _ = strconv.Atoi(port.ParentId)
+			}
+
+		} else {
+			if !strings.HasPrefix(port.Parent, "npu") {
+				slog.Info("Parent interface does not exist yet ")
+			}
+		}
+	}
+
 	data, _ := json.Marshal(postData)
 	requestURL := fmt.Sprintf("%s/%s", e.baseurl, "api/dcim/interfaces/")
 	_, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
 	if err != nil {
 		slog.Error(err.Error())
+		
 	}
 }
 
-func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces []model.NetboxInterfaceUpdateCreate) {
+func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces *[]model.NetboxInterfaceUpdateCreate, netboxVlansForSite *[]model.NetboxVlan, netboxSiteId int, netboxTenantId int) {
 	var devicesWithParent []model.NetboxInterfaceUpdateCreate
 	var lagInterfaces []model.NetboxInterfaceUpdateCreate
 	var standalone []model.NetboxInterfaceUpdateCreate
 
-	for _, iface := range interfaces {
+	for _, iface := range *interfaces {
 		if iface.Parent != "" {
 			devicesWithParent = append(devicesWithParent, iface)
 			continue
@@ -238,28 +348,29 @@ func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces []model.NetboxInte
 
 	for _, port := range lagInterfaces {
 		if port.Mode == "create" {
-			e.createInterface(port)
+			e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
 		}
 		if port.Mode == "update" {
-			e.updateInterface(port)
+			e.updateInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
 		}
 	}
 
 	for _, port := range devicesWithParent {
 		if port.Mode == "create" {
-			e.createInterface(port)
+			e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
 		}
 		if port.Mode == "update" {
-			e.updateInterface(port)
+			e.updateInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
 		}
 	}
 
 	for _, port := range standalone {
+
 		if port.Mode == "create" {
-			e.createInterface(port)
+			e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
 		}
 		if port.Mode == "update" {
-			e.updateInterface(port)
+			e.updateInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
 		}
 	}
 }

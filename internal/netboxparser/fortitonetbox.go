@@ -105,6 +105,16 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 					}
 				}
 			}
+		} else if port.InterfaceType == "vlan" {
+			matched.Mode = "create"
+			matched.Name = port.Name
+			matched.Description = port.Description
+			matched.PortType = port.InterfaceType
+			matched.DeviceId = deviceId
+			matched.VlanMode = "access"
+			matched.VlanId = port.VlanId
+			matched.Parent = port.Parent
+			matched.ParentId = getParentID(matched.Parent, netboxDeviceInterfaces)
 		}
 	} else {
 		if matched.Description != "" || matched.Status != "" || matched.PortTypeUpdate != "" || matched.Parent != "" || matched.VlanMode != "" {
@@ -129,7 +139,7 @@ func ParseFortigateInterfaces(fortiInterfaces *[]model.FortigateInterface, netbo
 		if result.Mode != "" {
 			results = append(results, result)
 		}
-	}
+	}	
 
 	return results
 }

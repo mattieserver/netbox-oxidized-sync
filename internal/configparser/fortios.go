@@ -115,6 +115,10 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 		}
 	}
 
+	if name == "''" {
+		return
+	}
+
 	switch interfaceType {
 	case "aggregate":
 		var aggr model.FortigateInterface
@@ -147,7 +151,11 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 func createVlan(name string, alias string, vdom string, vlanId string, parentName string, description string) model.FortigateInterface {
 	var vid model.FortigateInterface
 	vid.InterfaceType = "vlan"
-	vid.Name = name
+	if alias != "" && alias == "''" {
+		vid.Name = alias
+	} else {
+		vid.Name = name
+	}	
 	vid.Description = createDescription(alias, vdom, description)
 	vid.VlanId = vlanId
 	vid.Parent = parentName
