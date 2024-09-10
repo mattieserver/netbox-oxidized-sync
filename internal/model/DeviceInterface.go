@@ -34,7 +34,10 @@ type NetboxInterface struct {
 	} `json:"type"`
 	Enabled bool        `json:"enabled"`
 	Parent  interface{} `json:"parent"`
-	Bridge  interface{} `json:"bridge"`
+	Bridge  struct{
+		ID      int    `json:"id"`
+		Name     string      `json:"name"`
+	} `json:"bridge"`
 	Lag     struct {
 		ID      int    `json:"id"`
 		URL     string `json:"url"`
@@ -197,6 +200,11 @@ type NetboxDevice struct {
 	DeviceBayCount         int       `json:"device_bay_count"`
 	ModuleBayCount         int       `json:"module_bay_count"`
 	InventoryItemCount     int       `json:"inventory_item_count"`
+}
+
+type FortigateVirtualSwitch struct {
+	Name          string
+	Members       []string
 }
 
 type NetboxInterfaceUpdateCreate struct {

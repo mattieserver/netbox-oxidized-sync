@@ -36,16 +36,28 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 			}
 			if port.InterfaceType == "physical" && len(allMembers) > 0 {
 				if parentIndex, ok := allMembers[port.Name]; ok {
-					if netboxInterface.Lag.ID == 0 {
-						matched.Parent = (*fortiInterfaces)[parentIndex].Name
-					} else {
-						if !strings.EqualFold(netboxInterface.Lag.Name, (*fortiInterfaces)[parentIndex].Name) {
+					if (*fortiInterfaces)[parentIndex].InterfaceType == "aggregate" {
+						if netboxInterface.Lag.ID == 0 {
 							matched.Parent = (*fortiInterfaces)[parentIndex].Name
+						} else {
+							if !strings.EqualFold(netboxInterface.Lag.Name, (*fortiInterfaces)[parentIndex].Name) {
+								matched.Parent = (*fortiInterfaces)[parentIndex].Name
+							}
+						}
+					} else if (*fortiInterfaces)[parentIndex].InterfaceType == "bridge" {
+						if netboxInterface.Bridge.ID == 0 {
+							matched.Parent = (*fortiInterfaces)[parentIndex].Name
+						} else {
+							if !strings.EqualFold(netboxInterface.Bridge.Name, (*fortiInterfaces)[parentIndex].Name) {
+								matched.Parent = (*fortiInterfaces)[parentIndex].Name
+							}
 						}
 					}
+
 					if matched.Parent != "" {
 						matched.ParentId = getParentID(matched.Parent, netboxDeviceInterfaces)
 					}
+					
 				}
 			}
 			if port.InterfaceType == "vlan" {

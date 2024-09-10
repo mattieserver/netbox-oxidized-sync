@@ -21,17 +21,21 @@ const (
 	intefaceMember                 = "        set member "
 	interfaceStatus                = "        set status "
 	interfaceDescription           = "        set description "
+	virtualSwitchPortPrefix        = "            edit "
 )
 
 func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
 	const (
-		start = "config system interface"
-		end   = "end"
+		start              = "config system interface"
+		end                = "end"
+		startVirtualSwitch = "config system virtual-switch"
 	)
 
 	var (
-		configInterfacesTracking bool
-		configInterfaces         []string
+		configVirtualSwitchTracking bool
+		configInterfacesTracking    bool
+		configInterfaces            []string
+		configVirtualSwitch         []string
 	)
 
 	scanner := bufio.NewScanner(strings.NewReader(*config))
@@ -40,16 +44,91 @@ func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
 		switch {
 		case configInterfacesTracking && line == end:
 			configInterfacesTracking = false
+		case configVirtualSwitchTracking && line == end:
+			configVirtualSwitchTracking = false
+		case configVirtualSwitchTracking:
+			configVirtualSwitch = append(configVirtualSwitch, line)
 		case configInterfacesTracking:
 			configInterfaces = append(configInterfaces, line)
 		case line == start:
 			configInterfacesTracking = true
+		case line == startVirtualSwitch:
+			configVirtualSwitchTracking = true
 		}
 	}
 
 	deviceInterfaces := parseInterfaces(configInterfaces)
+	deviceVirtualSwitches := parseVirtualSwitch(configVirtualSwitch)
+	convertVirtualSwitch(deviceVirtualSwitches, deviceInterfaces)
 
 	return deviceInterfaces, nil
+}
+
+func parseVirtualSwitch(virtualSwitches []string) *[]model.FortigateVirtualSwitch{
+
+	var deviceVirtualSwitches []model.FortigateVirtualSwitch
+
+	var (
+		configVirtualSwitch         []string
+		configVirtualSwitchTracking bool
+	)
+
+	for _, element := range virtualSwitches {
+		if strings.HasPrefix(element, interfaceNamePrefix) {
+			configVirtualSwitchTracking = true
+			configVirtualSwitch = []string{element}
+			continue
+		}
+
+		if strings.HasPrefix(element, "    next") {
+			if configVirtualSwitchTracking {
+				configVirtualSwitchTracking = false
+				parseSingleVirtualSwitch(configVirtualSwitch, &deviceVirtualSwitches)
+			}
+			continue
+		}
+
+		if configVirtualSwitchTracking {
+			configVirtualSwitch = append(configVirtualSwitch, element)
+		}
+	}
+	return &deviceVirtualSwitches
+}
+
+func parseSingleVirtualSwitch(virtualSwitchData []string, results *[]model.FortigateVirtualSwitch)  {
+	var name string
+	var portNames []string
+
+	portPrefixes := map[string]*[]string{
+		virtualSwitchPortPrefix: &portNames,
+	}
+
+	prefixes := map[string]*string{
+		interfaceNamePrefix: &name,
+	}
+
+	for _, element := range virtualSwitchData {
+		for prefix, value := range prefixes {
+			if strings.HasPrefix(element, prefix) {
+				*value = getElementValue(element, prefix)
+			}
+		}
+
+		for portPrefix, portValue := range portPrefixes {
+			if strings.HasPrefix(element, portPrefix) {
+				*portValue = append(*portValue, getElementValue(element, portPrefix))
+			}
+		}
+	}
+
+	if name == "''" {
+		return
+	}
+
+	var vSwitch model.FortigateVirtualSwitch
+	vSwitch.Name = name
+	vSwitch.Members = portNames
+	*results = append(*results, vSwitch)
 }
 
 func parseInterfaces(interfaces []string) *[]model.FortigateInterface {
@@ -87,6 +166,28 @@ func parseInterfaces(interfaces []string) *[]model.FortigateInterface {
 
 func getElementValue(element string, filter string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(element, filter, ""), "\"", "")
+}
+
+func convertVirtualSwitch(virtutalSwitches *[]model.FortigateVirtualSwitch, deviceInterfaces *[]model.FortigateInterface ) {
+
+	var virtualSwitchNames = map[string]string{}
+
+	for _, member := range *virtutalSwitches {
+		var vswitch model.FortigateInterface
+		vswitch.Name = member.Name
+		vswitch.InterfaceType = "bridge"
+		vswitch.Members = member.Members
+		*deviceInterfaces = append(*deviceInterfaces, vswitch)
+		for _, vswitchMember := range member.Members {
+			virtualSwitchNames[vswitchMember] = member.Name
+		} 
+	}
+
+	for index, dinterface := range *deviceInterfaces {
+		if virtualSwitchNames[dinterface.Name] != "" {
+			(*deviceInterfaces)[index].Parent = virtualSwitchNames[dinterface.Name]
+		}
+	}
 }
 
 func parseSingleInterface(interfaceData []string, results *[]model.FortigateInterface) {
@@ -155,7 +256,7 @@ func createVlan(name string, alias string, vdom string, vlanId string, parentNam
 		vid.Name = alias
 	} else {
 		vid.Name = name
-	}	
+	}
 	vid.Description = createDescription(alias, vdom, description)
 	vid.VlanId = vlanId
 	vid.Parent = parentName

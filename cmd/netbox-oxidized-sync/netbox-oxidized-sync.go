@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"log/slog"
 	"slices"
 	"strconv"
 
@@ -29,7 +28,7 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				log.Println("IOS not supported for now")
 			case "FortiOS":
 				log.Printf("Device: '%s' has fortiOS", j.Name)
-				fortigateInterfaces,_ := configparser.ParseFortiOSConfig(&config)
+				fortigateInterfaces, _ := configparser.ParseFortiOSConfig(&config)
 				var netboxDevice = (*netboxdevices)[idx]
 				netboxInterfaceForDevice := netboxhttp.GetIntefacesForDevice(strconv.Itoa(netboxDevice.ID))
 				netboxVlansForSite, err := netboxhttp.GetVlansForSite(strconv.Itoa(netboxDevice.Site.ID))
