@@ -112,7 +112,7 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 				}
 			}
 		} else if port.InterfaceType == lagName && len(port.Members) > 0 {
-			if len(port.Members) != 1 && port.Members[0] != "" {
+			if len(port.Members) >= 1 && port.Members[0] != "" {
 				matched.Mode = "create"
 				matched.PortType = port.InterfaceType
 				matched.Name = port.Name
@@ -126,7 +126,7 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 						matched.Status = "enabled"
 					}
 				}
-			}
+			} 
 		} else if port.InterfaceType == "vlan" {
 			matched.Mode = "create"
 			matched.Name = port.Name

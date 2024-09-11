@@ -231,7 +231,11 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 		aggr.InterfaceType = "aggregate"
 		aggr.Name = name
 		memberNames := strings.Split(member, " ")
-		aggr.Members = append(aggr.Members, memberNames...)
+		for _, memberName := range memberNames {
+			if memberName != "" && memberName != "''" {
+				aggr.Members = append(aggr.Members, memberName)
+			}
+		}		
 		aggr.Description = createDescription(alias, vdom, description)
 		if interfaceType == "redundant" {
 			aggr.Description = "redundant; " + aggr.Description
