@@ -7,6 +7,11 @@ import (
 	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
 )
 
+const (
+	virtualSwitchName = "virtual-switch"
+	lagName = "aggregate"
+)
+
 func getParentID(parentName string, netboxDeviceInterfaces *[]model.NetboxInterface) string {
 	for _, netboxParentInterface := range *netboxDeviceInterfaces {
 		if strings.EqualFold(netboxParentInterface.Name, parentName) {
@@ -28,15 +33,19 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 				InterfaceId: strconv.Itoa(netboxInterface.ID),
 			}
 
-			if port.InterfaceType == "aggregate" && netboxInterface.Type.Value != "lag" {
+			if port.InterfaceType == lagName && netboxInterface.Type.Value != "lag" {
 				matched.PortTypeUpdate = "lag"
+			}
+			if port.InterfaceType == virtualSwitchName && netboxInterface.Type.Value != "bridge" {
+				matched.PortTypeUpdate = "bridge"
 			}
 			if !strings.EqualFold(port.Description, netboxInterface.Description) {
 				matched.Description = port.Description
 			}
 			if port.InterfaceType == "physical" && len(allMembers) > 0 {
 				if parentIndex, ok := allMembers[port.Name]; ok {
-					if (*fortiInterfaces)[parentIndex].InterfaceType == "aggregate" {
+					if (*fortiInterfaces)[parentIndex].InterfaceType == lagName {
+						matched.ParentType = lagName
 						if netboxInterface.Lag.ID == 0 {
 							matched.Parent = (*fortiInterfaces)[parentIndex].Name
 						} else {
@@ -44,7 +53,8 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 								matched.Parent = (*fortiInterfaces)[parentIndex].Name
 							}
 						}
-					} else if (*fortiInterfaces)[parentIndex].InterfaceType == "bridge" {
+					} else if (*fortiInterfaces)[parentIndex].InterfaceType == virtualSwitchName {
+						matched.ParentType = virtualSwitchName
 						if netboxInterface.Bridge.ID == 0 {
 							matched.Parent = (*fortiInterfaces)[parentIndex].Name
 						} else {
@@ -101,7 +111,7 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 					matched.Status = "enabled"
 				}
 			}
-		} else if port.InterfaceType == "aggregate" && len(port.Members) > 0 {
+		} else if port.InterfaceType == lagName && len(port.Members) > 0 {
 			if len(port.Members) != 1 && port.Members[0] != "" {
 				matched.Mode = "create"
 				matched.PortType = port.InterfaceType
@@ -127,6 +137,12 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 			matched.VlanId = port.VlanId
 			matched.Parent = port.Parent
 			matched.ParentId = getParentID(matched.Parent, netboxDeviceInterfaces)
+		} else if port.InterfaceType == virtualSwitchName {
+			matched.Mode = "create"
+			matched.Name = port.Name
+			matched.Description = port.Description
+			matched.PortType = port.InterfaceType
+			matched.DeviceId = deviceId
 		}
 	} else {
 		if matched.Description != "" || matched.Status != "" || matched.PortTypeUpdate != "" || matched.Parent != "" || matched.VlanMode != "" {

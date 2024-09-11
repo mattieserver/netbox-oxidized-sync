@@ -175,7 +175,8 @@ func convertVirtualSwitch(virtutalSwitches *[]model.FortigateVirtualSwitch, devi
 	for _, member := range *virtutalSwitches {
 		var vswitch model.FortigateInterface
 		vswitch.Name = member.Name
-		vswitch.InterfaceType = "bridge"
+		vswitch.InterfaceType = "virtual-switch"
+		vswitch.Description = "virtual-switch"
 		vswitch.Members = member.Members
 		*deviceInterfaces = append(*deviceInterfaces, vswitch)
 		for _, vswitchMember := range member.Members {
@@ -220,6 +221,10 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 		return
 	}
 
+	if alias == "''" {
+		alias = ""
+	}
+
 	switch interfaceType {
 	case "aggregate":
 		var aggr model.FortigateInterface
@@ -252,7 +257,7 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 func createVlan(name string, alias string, vdom string, vlanId string, parentName string, description string) model.FortigateInterface {
 	var vid model.FortigateInterface
 	vid.InterfaceType = "vlan"
-	if alias != "" && alias == "''" {
+	if alias != "" {
 		vid.Name = alias
 	} else {
 		vid.Name = name

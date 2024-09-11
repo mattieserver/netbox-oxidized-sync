@@ -34,11 +34,11 @@ type NetboxInterface struct {
 	} `json:"type"`
 	Enabled bool        `json:"enabled"`
 	Parent  interface{} `json:"parent"`
-	Bridge  struct{
-		ID      int    `json:"id"`
-		Name     string      `json:"name"`
+	Bridge  struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
 	} `json:"bridge"`
-	Lag     struct {
+	Lag struct {
 		ID      int    `json:"id"`
 		URL     string `json:"url"`
 		Display string `json:"display"`
@@ -203,8 +203,8 @@ type NetboxDevice struct {
 }
 
 type FortigateVirtualSwitch struct {
-	Name          string
-	Members       []string
+	Name    string
+	Members []string
 }
 
 type NetboxInterfaceUpdateCreate struct {
@@ -216,11 +216,11 @@ type NetboxInterfaceUpdateCreate struct {
 	Description    string
 	Mode           string
 	Parent         string
-	ParentId         string
+	ParentId       string
+	ParentType     string
 	VlanMode       string
 	VlanId         string
 	InterfaceId    string
-
 }
 
 type NetboxVlan struct {
@@ -261,4 +261,3 @@ type NetboxVlan struct {
 	LastUpdated time.Time `json:"last_updated"`
 	PrefixCount int       `json:"prefix_count"`
 }
-

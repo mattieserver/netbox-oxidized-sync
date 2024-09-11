@@ -24,6 +24,7 @@ type interfacePatchData struct {
 	Enabled       *bool  `json:"enabled,omitempty"`
 	Parent        int    `json:"parent,omitempty"`
 	Lag           int    `json:"lag,omitempty"`
+	Bridge        int    `json:"bridge,omitempty"`
 	InterfaceType string `json:"type,omitempty"`
 	Mode          string `json:"mode,omitempty"`
 	UntaggedVlan  int    `json:"untagged_vlan,omitempty"`
@@ -38,6 +39,7 @@ type interfacePostData struct {
 	UntaggedVlan  int    `json:"untagged_vlan,omitempty"`
 	Mode          string `json:"mode,omitempty"`
 	Parent        int    `json:"parent,omitempty"`
+	Bridge        int    `json:"bridge,omitempty"`
 	Lag           int    `json:"lag,omitempty"`
 }
 
@@ -192,7 +194,12 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 	if port.Parent != "" {
 		if port.ParentId != "" {
 			if port.PortType == "physical" {
-				patchData.Lag, _ = strconv.Atoi(port.ParentId)
+				if port.ParentType == "virtual-switch" {
+					patchData.Bridge, _ = strconv.Atoi(port.ParentId)
+				} else if port.ParentType == "aggregate" {
+					patchData.Lag, _ = strconv.Atoi(port.ParentId)
+				}
+
 			} else {
 				patchData.Parent, _ = strconv.Atoi(port.ParentId)
 			}
@@ -263,10 +270,10 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 
 	if port.PortType == "aggregate" {
 		postData.InterfaceType = "lag"
-	}
-
-	if port.PortType == "vlan" {
+	} else if port.PortType == "vlan" {
 		postData.InterfaceType = "virtual"
+	} else if port.PortType == "virtual-switch" {
+		postData.InterfaceType = "bridge"
 	}
 
 	if port.VlanId != "" {
@@ -308,7 +315,11 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 	if port.Parent != "" {
 		if port.ParentId != "" {
 			if port.PortType == "physical" {
-				postData.Lag, _ = strconv.Atoi(port.ParentId)
+				if port.ParentType == "virtual-switch" {
+					postData.Bridge, _ = strconv.Atoi(port.ParentId)
+				} else if port.ParentType == "aggregate" {
+					postData.Lag, _ = strconv.Atoi(port.ParentId)
+				}
 			} else {
 				postData.Parent, _ = strconv.Atoi(port.ParentId)
 			}
@@ -325,7 +336,7 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 	_, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
 	if err != nil {
 		slog.Error(err.Error())
-		
+
 	}
 }
 
