@@ -33,7 +33,10 @@ type NetboxInterface struct {
 		Label string `json:"label"`
 	} `json:"type"`
 	Enabled bool        `json:"enabled"`
-	Parent  interface{} `json:"parent"`
+	Parent  struct{
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"parent"`
 	Bridge  struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
@@ -228,6 +231,8 @@ type NetboxInterfaceUpdateCreate struct {
 	VlanMode       string
 	VlanId         string
 	InterfaceId    string
+	Tags           []string
+	Matched        bool
 }
 
 type NetboxVlan struct {

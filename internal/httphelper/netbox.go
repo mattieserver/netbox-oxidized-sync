@@ -20,14 +20,15 @@ type netboxResult struct {
 }
 
 type interfacePatchData struct {
-	Description   string `json:"description,omitempty"`
-	Enabled       *bool  `json:"enabled,omitempty"`
-	Parent        int    `json:"parent,omitempty"`
-	Lag           int    `json:"lag,omitempty"`
-	Bridge        int    `json:"bridge,omitempty"`
-	InterfaceType string `json:"type,omitempty"`
-	Mode          string `json:"mode,omitempty"`
-	UntaggedVlan  int    `json:"untagged_vlan,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Enabled       *bool    `json:"enabled,omitempty"`
+	Parent        int      `json:"parent,omitempty"`
+	Lag           int      `json:"lag,omitempty"`
+	Bridge        int      `json:"bridge,omitempty"`
+	InterfaceType string   `json:"type,omitempty"`
+	Mode          string   `json:"mode,omitempty"`
+	UntaggedVlan  int      `json:"untagged_vlan,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 type interfacePostData struct {
@@ -301,6 +302,10 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 		if port.PortTypeUpdate == "virtual" {
 			patchData.InterfaceType = "virtual"
 		}
+		if port.PortTypeUpdate == "bridge" {
+			patchData.InterfaceType = "bridge"
+		}
+
 	}
 	if port.VlanMode != "" {
 		patchData.Mode = port.VlanMode
@@ -315,6 +320,13 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 			vlan := e.createVlan(netboxSiteId, netboxTenantId, vid, port.Name)
 			*netboxVlansForSite = append(*netboxVlansForSite, vlan)
 		}
+	}
+
+	if len(port.Tags) != 0 {
+		patchData.Tags = port.Tags
+		patchData.Tags = append(patchData.Tags, strconv.Itoa(e.defaultTag.ID))
+	} else {
+		patchData.Tags = []string{strconv.Itoa(e.defaultTag.ID)}
 	}
 
 	data, _ := json.Marshal(patchData)
