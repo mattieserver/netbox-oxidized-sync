@@ -14,7 +14,7 @@ import (
 
 func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, netboxdevices *[]model.NetboxDevice, oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp *httphelper.NetboxHTTPClient) {
 	for j := range jobs {
-		log.Printf("Got oxided device: '%s' on worker %s",j.Name, strconv.Itoa(id), )
+		log.Printf("Got oxided device: '%s' on worker %s", j.Name, strconv.Itoa(id))
 
 		idx := slices.IndexFunc(*netboxdevices, func(c model.NetboxDevice) bool { return c.Name == j.Name })
 		if idx == -1 {
@@ -37,7 +37,7 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				}
 				interfacesToUpdate := netboxparser.ParseFortigateInterfaces(fortigateInterfaces, &netboxInterfaceForDevice, strconv.Itoa(netboxDevice.ID))
 				netboxhttp.UpdateOrCreateInferface(&interfacesToUpdate, &netboxVlansForSite, netboxDevice.Site.ID, netboxDevice.Tenant.ID)
-				
+
 			default:
 				log.Printf("Model '%s' currently not supported", j.Model)
 			}
@@ -63,7 +63,7 @@ func loadOxidizedDevices(oxidizedhttp *httphelper.OxidizedHTTPClient, netboxhttp
 		go worker(w, jobs, results, &devices, oxidizedhttp, netboxhttp)
 	}
 
-	for _, element := range nodes { 
+	for _, element := range nodes {
 		jobs <- element
 	}
 	close(jobs)
@@ -83,6 +83,8 @@ func main() {
 
 	netboxhttp := httphelper.NewNetbox(conf.Netbox.BaseURL, conf.Netbox.APIKey, conf.Netbox.Roles)
 	oxidizedhttp := httphelper.NewOxidized(conf.Oxidized.BaseURL, conf.Oxidized.Username, conf.Oxidized.Password)
+
+	netboxhttp.GetManagedTag(conf.Netbox.TagName)
 
 	loadOxidizedDevices(&oxidizedhttp, &netboxhttp)
 }

@@ -91,8 +91,15 @@ type NetboxInterface struct {
 	ConnectedEndpoints          interface{}   `json:"connected_endpoints"`
 	ConnectedEndpointsType      interface{}   `json:"connected_endpoints_type"`
 	ConnectedEndpointsReachable interface{}   `json:"connected_endpoints_reachable"`
-	Tags                        []interface{} `json:"tags"`
-	CustomFields                struct {
+	Tags                        []struct {
+		ID      int    `json:"id"`
+		URL     string `json:"url"`
+		Display string `json:"display"`
+		Name    string `json:"name"`
+		Slug    string `json:"slug"`
+		Color   string `json:"color"`
+	} `json:"tags"`
+	CustomFields struct {
 	} `json:"custom_fields"`
 	Created          time.Time `json:"created"`
 	LastUpdated      time.Time `json:"last_updated"`
@@ -260,4 +267,18 @@ type NetboxVlan struct {
 	Created     time.Time `json:"created"`
 	LastUpdated time.Time `json:"last_updated"`
 	PrefixCount int       `json:"prefix_count"`
+}
+
+type NetboxTag struct {
+	ID          int       `json:"id"`
+	URL         string    `json:"url"`
+	Display     string    `json:"display"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Color       string    `json:"color"`
+	Description string    `json:"description"`
+	ObjectTypes []string  `json:"object_types"`
+	TaggedItems int       `json:"tagged_items"`
+	Created     time.Time `json:"created"`
+	LastUpdated time.Time `json:"last_updated"`
 }

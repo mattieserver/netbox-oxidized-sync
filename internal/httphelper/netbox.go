@@ -31,27 +31,36 @@ type interfacePatchData struct {
 }
 
 type interfacePostData struct {
-	Device        int    `json:"device"`
-	Name          string `json:"name"`
-	InterfaceType string `json:"type"`
-	Description   string `json:"description,omitempty"`
-	Enabled       *bool  `json:"enabled,omitempty"`
-	UntaggedVlan  int    `json:"untagged_vlan,omitempty"`
-	Mode          string `json:"mode,omitempty"`
-	Parent        int    `json:"parent,omitempty"`
-	Bridge        int    `json:"bridge,omitempty"`
-	Lag           int    `json:"lag,omitempty"`
+	Device        int      `json:"device"`
+	Name          string   `json:"name"`
+	InterfaceType string   `json:"type"`
+	Description   string   `json:"description,omitempty"`
+	Enabled       *bool    `json:"enabled,omitempty"`
+	UntaggedVlan  int      `json:"untagged_vlan,omitempty"`
+	Mode          string   `json:"mode,omitempty"`
+	Parent        int      `json:"parent,omitempty"`
+	Bridge        int      `json:"bridge,omitempty"`
+	Lag           int      `json:"lag,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 type vlanPostData struct {
-	SiteId   int    `json:"site,omitempty"`
-	TenantId int    `json:"tenant,omitempty"`
-	VlanId   int    `json:"vid"`
-	Name     string `json:"name"`
+	SiteId   int      `json:"site,omitempty"`
+	TenantId int      `json:"tenant,omitempty"`
+	VlanId   int      `json:"vid"`
+	Name     string   `json:"name"`
+	Tags     []string `json:"tags,omitempty"`
+}
+
+type tagPostData struct {
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type netboxData interface {
-	model.NetboxInterface | model.NetboxDevice | model.NetboxVlan
+	model.NetboxInterface | model.NetboxDevice | model.NetboxVlan | model.NetboxTag
 }
 
 type NetboxHTTPClient struct {
@@ -59,6 +68,7 @@ type NetboxHTTPClient struct {
 	baseurl     string
 	client      http.Client
 	rolesfilter string
+	defaultTag  model.NetboxTag
 }
 
 func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
@@ -80,8 +90,66 @@ func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
 		rolesfilter = sb.String()
 	}
 
-	e := NetboxHTTPClient{apikey, baseurl, *client, rolesfilter}
+	e := NetboxHTTPClient{apikey, baseurl, *client, rolesfilter, model.NetboxTag{}}
 	return e
+}
+
+func (e *NetboxHTTPClient) GetManagedTag(tagName string) {
+	tag, err := getNetboxTagByName(tagName, e)
+	if err != nil {
+		slog.Error("Error getting tags", err)
+	}
+	if tag.ID == 0 {
+		newTag := e.createNetboxTag(tagName)
+		e.defaultTag = newTag
+	} else {
+		e.defaultTag = tag
+	}
+}
+
+func getNetboxTagByName(tagName string, e *NetboxHTTPClient) (model.NetboxTag, error) {
+	requestURL := fmt.Sprintf("%s/api/extras/tags/", e.baseurl)
+	tags, err := apiRequest[model.NetboxTag](requestURL, e)
+	if err != nil {
+		return model.NetboxTag{}, err
+	}
+	for _, iface := range tags {
+		if iface.Name == tagName {
+			return iface, nil
+		}
+	}
+	return model.NetboxTag{}, nil
+}
+
+func slugify(input string) string {
+	var result string
+
+	result = strings.ToLower(input)
+	result = strings.Replace(result, " ", "-", -1)
+
+	return result
+}
+
+func (e *NetboxHTTPClient) createNetboxTag(tagName string) model.NetboxTag {
+	var postData tagPostData
+	postData.Name = tagName
+	postData.Slug = slugify(tagName)
+	postData.Description = "Auto generated tag to track objects created by the oxidized sync"
+	postData.Color = "72599f"
+
+	data, _ := json.Marshal(postData)
+	requestURL := fmt.Sprintf("%s/api/extras/tags/", e.baseurl)
+	resBody, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+
+	var result model.NetboxTag
+	err = json.Unmarshal(resBody, &result)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+	return result
 }
 
 func loopAPIRequest(path string, e *NetboxHTTPClient) (netboxResult, error) {
@@ -165,6 +233,7 @@ func (e *NetboxHTTPClient) createVlan(SiteId int, TenantId int, VlanId int, Name
 	postData.SiteId = SiteId
 	postData.VlanId = VlanId
 	postData.TenantId = TenantId
+	postData.Tags = []string{strconv.Itoa(e.defaultTag.ID)}
 
 	data, _ := json.Marshal(postData)
 	requestURL := fmt.Sprintf("%s/api/ipam/vlans/", e.baseurl)
@@ -330,6 +399,8 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 			}
 		}
 	}
+
+	postData.Tags = []string{strconv.Itoa(e.defaultTag.ID)}
 
 	data, _ := json.Marshal(postData)
 	requestURL := fmt.Sprintf("%s/%s", e.baseurl, "api/dcim/interfaces/")

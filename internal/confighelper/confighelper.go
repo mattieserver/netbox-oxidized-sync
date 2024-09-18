@@ -11,6 +11,7 @@ type Config struct {
 		BaseURL string `json:"base_url"`
 		APIKey  string `json:"api_key"`
 		Roles	string `json:"roles"`
+		TagName string `json:"tag-name"`
 	} `json:"netbox"`
 	Oxidized struct {
 		BaseURL  string `json:"base_url"`
