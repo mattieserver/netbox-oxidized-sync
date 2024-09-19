@@ -323,7 +323,11 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 	}
 
 	if len(port.Tags) != 0 {
-		patchData.Tags = port.Tags
+		for _,tag := range port.Tags {
+			if tag != strconv.Itoa(e.defaultTag.ID) {
+				patchData.Tags = append(patchData.Tags, tag)
+			}
+		}
 		patchData.Tags = append(patchData.Tags, strconv.Itoa(e.defaultTag.ID))
 	} else {
 		patchData.Tags = []string{strconv.Itoa(e.defaultTag.ID)}
