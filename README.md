@@ -24,3 +24,17 @@ Clone the repo and run `go build cmd/netbox-oxidized-sync/netbox-oxidized-sync.g
 Then you can run `./netbox-oxidized-sync` to run the binary.
 
 To configure the application copy the `configs/example.settings.json` to `configs/settings.json` and modify where needed.
+
+### Use with docker
+
+The docker container runs a cron job every day at 01:00.  
+You will have to mount the config file at `/opt/configs/settings.json`
+
+
+## Docker build
+
+To build the container localy run:
+
+```bash
+docker buildx build -f build/Dockerfile .
+```
