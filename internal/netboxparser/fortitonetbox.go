@@ -31,6 +31,13 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 				Name:        port.Name,
 				PortType:    port.InterfaceType,
 				InterfaceId: strconv.Itoa(netboxInterface.ID),
+				Matched : true,
+			}
+
+			if len(netboxInterface.Tags) != 0 {
+				for _, tag := range netboxInterface.Tags {
+					matched.Tags = append(matched.Tags,  strconv.Itoa(tag.ID))
+				}
 			}
 
 			if port.InterfaceType == lagName && netboxInterface.Type.Value != "lag" {
@@ -72,8 +79,10 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 			}
 			if port.InterfaceType == "vlan" {
 				if port.Parent != "" {
-					matched.Parent = port.Parent
-					matched.ParentId = getParentID(matched.Parent, netboxDeviceInterfaces)
+					matched.ParentId = getParentID(port.Parent, netboxDeviceInterfaces)
+					if matched.ParentId != strconv.Itoa(netboxInterface.Parent.ID) {
+						matched.Parent = port.Parent
+					}
 				}
 
 				if netboxInterface.Mode.Value != "access" {
@@ -97,7 +106,7 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 		}
 	}
 
-	if matched == (model.NetboxInterfaceUpdateCreate{}) {
+	if !matched.Matched {
 		if port.InterfaceType == "physical" && port.Name != "modem" && !strings.HasPrefix(port.Name, "npu") {
 			matched.Mode = "create"
 			matched.Name = port.Name
@@ -146,7 +155,9 @@ func processPort(port model.FortigateInterface, allMembers map[string]int, forti
 		}
 	} else {
 		if matched.Description != "" || matched.Status != "" || matched.PortTypeUpdate != "" || matched.Parent != "" || matched.VlanMode != "" {
-			matched.Mode = "update"
+			if !strings.HasPrefix(port.Parent, "npu") {
+				matched.Mode = "update"
+			}			
 		}
 	}
 	return matched

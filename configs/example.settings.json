@@ -3,6 +3,7 @@
         "base_url": "http://localhost:8000",
         "api_key": "xxxx-xxxx-xxxx",
         "roles": [""]
+        "tag-name": "oxidized-sync"
     },
     "oxidized": {
         "base_url": "http://localhost:8001",
