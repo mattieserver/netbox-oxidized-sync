@@ -40,7 +40,10 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				netboxhttp.UpdateOrCreateInferface(&interfacesToUpdate, &netboxVlansForSite, netboxDevice.Site.ID, netboxDevice.Tenant.ID)
 
 			case "FTOS":
+				log.Printf("Device: '%s' has FTOS", j.Name)
 				slog.Info("FTOS")
+
+				configparser.ParseFTOSConfig(&config)
 				
 			default:
 				log.Printf("Model '%s' currently not supported", j.Model)

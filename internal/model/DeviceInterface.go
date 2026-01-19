@@ -13,6 +13,15 @@ type FortigateInterface struct {
 	InterfaceType string
 }
 
+type FTOSInterface struct {
+	Name          string
+	Description   string
+	Status        string
+	VlanId        string
+	Parent        string
+	InterfaceType string
+}
+
 type NetboxInterface struct {
 	ID      int    `json:"id"`
 	URL     string `json:"url"`
@@ -210,7 +219,7 @@ type FortigateVirtualSwitch struct {
 type NetboxInterfaceUpdateCreate struct {
 	DeviceId       string
 	PortType       string
-	PortTypeUpdate string
+	PortTypeUpdate string // physical, vlan
 	Name           string
 	Status         string
 	Description    string

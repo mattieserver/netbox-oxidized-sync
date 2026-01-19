@@ -61,16 +61,16 @@ type NetboxHTTPClient struct {
 	rolesfilter string
 }
 
-func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
+func NewNetbox(baseurl string, apikey string, roles []string) NetboxHTTPClient {
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{Transport: customTransport}
 
 	rolesfilter := ""
-	if roles != "" {
+	if len(roles) > 0 {
 		var sb strings.Builder
-		splitRoles := strings.Split(roles, ",")
-		for index, element := range splitRoles {
+		
+		for index, element := range roles {
 			if index == 0 {
 				sb.WriteString(fmt.Sprintf("?role=%s", element))
 			} else {

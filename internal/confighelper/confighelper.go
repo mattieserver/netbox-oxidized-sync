@@ -10,7 +10,7 @@ type Config struct {
 	Netbox struct {
 		BaseURL string `json:"base_url"`
 		APIKey  string `json:"api_key"`
-		Roles	string `json:"roles"`
+		Roles	[]string `json:"roles"`
 	} `json:"netbox"`
 	Oxidized struct {
 		BaseURL  string `json:"base_url"`
