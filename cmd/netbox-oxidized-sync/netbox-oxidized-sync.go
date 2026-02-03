@@ -44,6 +44,14 @@ func worker(id int, jobs <-chan httphelper.OxidizedNode, results chan<- int, net
 				slog.Info("FTOS")
 
 				configparser.ParseFTOSConfig(&config)
+
+				var netboxDevice = (*netboxdevices)[idx]
+				netboxInterfaceForDevice := netboxhttp.GetIntefacesForDevice(strconv.Itoa(netboxDevice.ID))
+				netboxVlansForSite, err := netboxhttp.GetVlansForSite(strconv.Itoa(netboxDevice.Site.ID))
+				if err != nil {
+					continue
+				}
+				
 				
 			default:
 				log.Printf("Model '%s' currently not supported", j.Model)

@@ -16,8 +16,8 @@ type FortigateInterface struct {
 type FTOSInterface struct {
 	Name          string
 	Description   string
-	Status        string
-	VlanId        string
+	Status        bool
+	VlanId        int
 	Parent        string
 	InterfaceType string
 }

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/mattieserver/netbox-oxidized-sync/internal/model"
 )
 
 const (
@@ -46,10 +48,11 @@ func ParseFTOSConfig(config *string) error {
 
 }
 
-func parseFTOSInterfaces(interfaces []string) {
+func parseFTOSInterfaces(interfaces []string) (*[]model.FTOSInterface) {
 	var (
 		configInterface         []string
 		configInterfaceTracking bool
+		deviceInterfaces *[]model.FTOSInterface
 	)
 
 	for _, element := range interfaces {
@@ -62,7 +65,8 @@ func parseFTOSInterfaces(interfaces []string) {
 		if strings.HasPrefix(element, "!") {
 			if configInterfaceTracking {
 				configInterfaceTracking = false
-				parseFTOSSingleInterface(configInterface)
+				inter :=parseFTOSSingleInterface(configInterface)
+				*deviceInterfaces = append(*deviceInterfaces, inter)
 			}
 			continue
 		}
@@ -71,23 +75,27 @@ func parseFTOSInterfaces(interfaces []string) {
 			configInterface = append(configInterface, element)
 		}
 	}
+
+	return deviceInterfaces
 }
 
-func parseFTOSSingleInterface(interfaceData []string) {
+func parseFTOSSingleInterface(interfaceData []string) (model.FTOSInterface){
+
+	var deviceInterface model.FTOSInterface
 
 	interfaceEnabled := false
 	var vlanId, channelGroupId, accessVlanID, mtu, interfaceChannelGroupId int
-	var interfaceType, description, switchportMode, trunkVlans string
+	var interfaceType, description, switchportMode, trunkVlans, ip_addr string
 
 	for _, element := range interfaceData {
 		if strings.HasPrefix(element, interfaceFTOSNamePrefix) {
 			if strings.Contains(element, "interface vlan") {
 				indexString, _ := strings.CutPrefix(element, "interface vlan")
-				vlanId,_ = strconv.Atoi(indexString)
+				vlanId, _ = strconv.Atoi(indexString)
 				interfaceType = "vlan"
 			} else if strings.Contains(element, "interface port-channel") {
 				indexString, _ := strings.CutPrefix(element, "interface port-channel")
-				channelGroupId,_ = strconv.Atoi(indexString)
+				channelGroupId, _ = strconv.Atoi(indexString)
 				interfaceType = "port-channel"
 			} else if strings.Contains(element, "interface ethernet") {
 				interfaceType = "ethernet"
@@ -111,9 +119,9 @@ func parseFTOSSingleInterface(interfaceData []string) {
 
 		if strings.HasPrefix(element, " channel-group") {
 			re := regexp.MustCompile(`channel-group\s+(\d+)`)
-    		matches := re.FindStringSubmatch(element)
+			matches := re.FindStringSubmatch(element)
 			if len(matches) > 1 {
-				interfaceChannelGroupId,_ =  strconv.Atoi(matches[0])
+				interfaceChannelGroupId, _ = strconv.Atoi(matches[0])
 			}
 			continue
 		}
@@ -125,7 +133,7 @@ func parseFTOSSingleInterface(interfaceData []string) {
 
 		if strings.HasPrefix(element, " switchport access vlan") {
 			indexString, _ := strings.CutPrefix(element, " switchport access vlan ")
-			accessVlanID,_ = strconv.Atoi(indexString)
+			accessVlanID, _ = strconv.Atoi(indexString)
 			continue
 		}
 
@@ -135,13 +143,43 @@ func parseFTOSSingleInterface(interfaceData []string) {
 		}
 
 		if strings.HasPrefix(element, " mtu") {
-			indexString, _ := strings.CutPrefix(element, " mtu  ")
-			mtu,_ = strconv.Atoi(indexString)
+			indexString, _ := strings.CutPrefix(element, " mtu ")
+			mtu, _ = strconv.Atoi(indexString)
 			continue
 		}
-		
 
+		if strings.HasPrefix(element, " ip address") {
+			ip_addr,_ = strings.CutPrefix(element, " ip address ")
+			continue
+		}
 	}
 
-	slog.Info("test", slog.Bool("interfaceEnabled", interfaceEnabled), slog.String("interfaceType", interfaceType), slog.Int("vlanid", vlanId),  slog.String("description", description), slog.Int("interfaceChannelGroupId", interfaceChannelGroupId), slog.Int("channelGroupID", channelGroupId), slog.String("switchportMode", switchportMode), slog.Int("accessVlanID ", accessVlanID), slog.String("trunkVlans", trunkVlans), slog.Int("mtu ", mtu), )
+	slog.Info("test", 
+		slog.Bool("interfaceEnabled", interfaceEnabled),
+		slog.String("interfaceType", interfaceType),
+		slog.Int("vlanid", vlanId),
+		slog.String("description", description),
+		slog.Int("interfaceChannelGroupId", interfaceChannelGroupId),
+		slog.Int("channelGroupID", channelGroupId),
+		slog.String("switchportMode", switchportMode),
+		slog.Int("accessVlanID", accessVlanID),
+		slog.String("trunkVlans", trunkVlans),
+		slog.Int("mtu ", mtu),
+		slog.String("ip_addr", ip_addr),
+	)
+
+	deviceInterface.Description = description
+	deviceInterface.InterfaceType = interfaceType
+	deviceInterface.Status = interfaceEnabled
+	if interfaceType == "vlan" {
+		deviceInterface.VlanId = vlanId
+	} else {
+		deviceInterface.VlanId = accessVlanID
+	}
+	deviceInterface.Parent = string(interfaceChannelGroupId)
+	// channelGroupId
+		
+	
+
+	return deviceInterface
 }
