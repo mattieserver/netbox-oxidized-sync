@@ -24,7 +24,9 @@ const (
 	virtualSwitchPortPrefix        = "            edit "
 )
 
-func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
+type FortiOSParser struct{}
+
+func (FortiOSParser) Parse(config string) ([]model.ParsedInterface, error) {
 	const (
 		start              = "config system interface"
 		end                = "end"
@@ -38,7 +40,7 @@ func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
 		configVirtualSwitch         []string
 	)
 
-	scanner := bufio.NewScanner(strings.NewReader(*config))
+	scanner := bufio.NewScanner(strings.NewReader(config))
 	for scanner.Scan() {
 		line := scanner.Text()
 		switch {
@@ -59,12 +61,26 @@ func ParseFortiOSConfig(config *string) (*[]model.FortigateInterface, error) {
 
 	deviceInterfaces := parseInterfaces(configInterfaces)
 	deviceVirtualSwitches := parseVirtualSwitch(configVirtualSwitch)
-	convertVirtualSwitch(deviceVirtualSwitches, deviceInterfaces)
+	convertVirtualSwitch(deviceVirtualSwitches, &deviceInterfaces)
+
+	// FortiGate-internal ports (modem, npu*) must never be created in NetBox, but
+	// if an operator already tracks one we still keep it in sync. Mark instead of
+	// drop so the generic differ updates an existing entry yet never creates one.
+	// Likewise, an interface whose parent is an npu virtual-link points at a port
+	// that is never synced, so it must be left untouched entirely.
+	for i := range deviceInterfaces {
+		if deviceInterfaces[i].Name == "modem" || strings.HasPrefix(deviceInterfaces[i].Name, "npu") {
+			deviceInterfaces[i].NoCreate = true
+		}
+		if strings.HasPrefix(deviceInterfaces[i].Parent, "npu") {
+			deviceInterfaces[i].NoUpdate = true
+		}
+	}
 
 	return deviceInterfaces, nil
 }
 
-func parseVirtualSwitch(virtualSwitches []string) *[]model.FortigateVirtualSwitch{
+func parseVirtualSwitch(virtualSwitches []string) *[]model.FortigateVirtualSwitch {
 
 	var deviceVirtualSwitches []model.FortigateVirtualSwitch
 
@@ -95,7 +111,7 @@ func parseVirtualSwitch(virtualSwitches []string) *[]model.FortigateVirtualSwitc
 	return &deviceVirtualSwitches
 }
 
-func parseSingleVirtualSwitch(virtualSwitchData []string, results *[]model.FortigateVirtualSwitch)  {
+func parseSingleVirtualSwitch(virtualSwitchData []string, results *[]model.FortigateVirtualSwitch) {
 	var name string
 	var portNames []string
 
@@ -131,9 +147,9 @@ func parseSingleVirtualSwitch(virtualSwitchData []string, results *[]model.Forti
 	*results = append(*results, vSwitch)
 }
 
-func parseInterfaces(interfaces []string) *[]model.FortigateInterface {
+func parseInterfaces(interfaces []string) []model.ParsedInterface {
 
-	var deviceInterfaces []model.FortigateInterface
+	var deviceInterfaces []model.ParsedInterface
 
 	var (
 		configInterface         []string
@@ -161,27 +177,27 @@ func parseInterfaces(interfaces []string) *[]model.FortigateInterface {
 		}
 	}
 
-	return &deviceInterfaces
+	return deviceInterfaces
 }
 
 func getElementValue(element string, filter string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(element, filter, ""), "\"", "")
 }
 
-func convertVirtualSwitch(virtutalSwitches *[]model.FortigateVirtualSwitch, deviceInterfaces *[]model.FortigateInterface ) {
+func convertVirtualSwitch(virtutalSwitches *[]model.FortigateVirtualSwitch, deviceInterfaces *[]model.ParsedInterface) {
 
 	var virtualSwitchNames = map[string]string{}
 
 	for _, member := range *virtutalSwitches {
-		var vswitch model.FortigateInterface
+		var vswitch model.ParsedInterface
 		vswitch.Name = member.Name
-		vswitch.InterfaceType = "virtual-switch"
+		vswitch.InterfaceType = model.TypeVirtualSwitch
 		vswitch.Description = "virtual-switch"
 		vswitch.Members = member.Members
 		*deviceInterfaces = append(*deviceInterfaces, vswitch)
 		for _, vswitchMember := range member.Members {
 			virtualSwitchNames[vswitchMember] = member.Name
-		} 
+		}
 	}
 
 	for index, dinterface := range *deviceInterfaces {
@@ -191,7 +207,21 @@ func convertVirtualSwitch(virtutalSwitches *[]model.FortigateVirtualSwitch, devi
 	}
 }
 
-func parseSingleInterface(interfaceData []string, results *[]model.FortigateInterface) {
+// fortiStatus maps a FortiOS "set status" value to the normalized tri-state.
+// FortiOS only emits "set status down" for a disabled interface; an interface
+// that is administratively up has no status line at all, so an empty value must
+// map to StatusUp (not StatusUnknown) or up-but-disabled ports are never
+// re-enabled in NetBox.
+func fortiStatus(status string) model.InterfaceStatus {
+	switch status {
+	case "down":
+		return model.StatusDown
+	default:
+		return model.StatusUp
+	}
+}
+
+func parseSingleInterface(interfaceData []string, results *[]model.ParsedInterface) {
 
 	var name, interfaceType, vlanId, parentName, alias, vdom, ip, speed, member, status, description string
 
@@ -227,27 +257,27 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 
 	switch interfaceType {
 	case "aggregate", "redundant":
-		var aggr model.FortigateInterface
-		aggr.InterfaceType = "aggregate"
+		var aggr model.ParsedInterface
+		aggr.InterfaceType = model.TypeAggregate
 		aggr.Name = name
 		memberNames := strings.Split(member, " ")
 		for _, memberName := range memberNames {
 			if memberName != "" && memberName != "''" {
 				aggr.Members = append(aggr.Members, memberName)
 			}
-		}		
+		}
 		aggr.Description = createDescription(alias, vdom, description)
 		if interfaceType == "redundant" {
 			aggr.Description = "redundant; " + aggr.Description
 		}
-		aggr.Status = status
+		aggr.Status = fortiStatus(status)
 		*results = append(*results, aggr)
 	case "physical":
-		var pyh model.FortigateInterface
-		pyh.InterfaceType = "physical"
+		var pyh model.ParsedInterface
+		pyh.InterfaceType = model.TypePhysical
 		pyh.Name = name
 		pyh.Speed = speed
-		pyh.Status = status
+		pyh.Status = fortiStatus(status)
 		pyh.Description = createDescription(alias, vdom, description)
 		*results = append(*results, pyh)
 	case "vlan":
@@ -261,9 +291,9 @@ func parseSingleInterface(interfaceData []string, results *[]model.FortigateInte
 	}
 }
 
-func createVlan(name string, alias string, vdom string, vlanId string, parentName string, description string) model.FortigateInterface {
-	var vid model.FortigateInterface
-	vid.InterfaceType = "vlan"
+func createVlan(name string, alias string, vdom string, vlanId string, parentName string, description string) model.ParsedInterface {
+	var vid model.ParsedInterface
+	vid.InterfaceType = model.TypeVlan
 	if alias != "" {
 		vid.Name = alias
 	} else {

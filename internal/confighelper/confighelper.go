@@ -2,7 +2,7 @@ package confighelper
 
 import (
 	"os"
-	"log"
+	"log/slog"
 	"encoding/json"
 )
 
@@ -10,7 +10,7 @@ type Config struct {
 	Netbox struct {
 		BaseURL string `json:"base_url"`
 		APIKey  string `json:"api_key"`
-		Roles	string `json:"roles"`
+		Roles	[]string `json:"roles"`
 		TagName string `json:"tag-name"`
 	} `json:"netbox"`
 	Oxidized struct {
@@ -23,7 +23,7 @@ type Config struct {
 func ReadConfig() Config {
     f, err := os.ReadFile("configs/settings.json")
     if err != nil {
-        log.Println(err)
+        slog.Error("failed to read config", "err", err)
     }
 
     var data Config

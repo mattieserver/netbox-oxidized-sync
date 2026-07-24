@@ -72,16 +72,16 @@ type NetboxHTTPClient struct {
 	defaultTag  model.NetboxTag
 }
 
-func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
+func NewNetbox(baseurl string, apikey string, roles []string) NetboxHTTPClient {
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{Transport: customTransport}
 
 	rolesfilter := ""
-	if roles != "" {
+	if len(roles) > 0 {
 		var sb strings.Builder
-		splitRoles := strings.Split(roles, ",")
-		for index, element := range splitRoles {
+		
+		for index, element := range roles {
 			if index == 0 {
 				sb.WriteString(fmt.Sprintf("?role=%s", element))
 			} else {
@@ -98,7 +98,7 @@ func NewNetbox(baseurl string, apikey string, roles string) NetboxHTTPClient {
 func (e *NetboxHTTPClient) GetManagedTag(tagName string) {
 	tag, err := getNetboxTagByName(tagName, e)
 	if err != nil {
-		slog.Error("Error getting tags", err)
+		slog.Error("Error getting tags", "err", err)
 	}
 	if tag.ID == 0 {
 		newTag := e.createNetboxTag(tagName)
@@ -142,13 +142,13 @@ func (e *NetboxHTTPClient) createNetboxTag(tagName string) model.NetboxTag {
 	requestURL := fmt.Sprintf("%s/api/extras/tags/", e.baseurl)
 	resBody, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
 	if err != nil {
-		slog.Error(err.Error())
+		slog.Error("failed to create tag", "err", err)
 	}
 
 	var result model.NetboxTag
 	err = json.Unmarshal(resBody, &result)
 	if err != nil {
-		slog.Error(err.Error())
+		slog.Error("failed to unmarshal tag", "err", err)
 	}
 	return result
 }
@@ -204,10 +204,9 @@ func (e *NetboxHTTPClient) GetAllDevices() []model.NetboxDevice {
 	return devices
 }
 
-func (e *NetboxHTTPClient) GetIntefacesForDevice(deviceId string) []model.NetboxInterface {
+func (e *NetboxHTTPClient) GetIntefacesForDevice(deviceId string) ([]model.NetboxInterface, error) {
 	requestURL := fmt.Sprintf("%s/api/dcim/interfaces/?device_id=%s", e.baseurl, deviceId)
-	devices, _ := apiRequest[model.NetboxInterface](requestURL, e)
-	return devices
+	return apiRequest[model.NetboxInterface](requestURL, e)
 }
 
 func (e *NetboxHTTPClient) GetVlansForSite(siteId string) ([]model.NetboxVlan, error) {
@@ -240,13 +239,13 @@ func (e *NetboxHTTPClient) createVlan(SiteId int, TenantId int, VlanId int, Name
 	requestURL := fmt.Sprintf("%s/api/ipam/vlans/", e.baseurl)
 	resBody, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
 	if err != nil {
-		slog.Error(err.Error())
+		slog.Error("failed to create vlan", "err", err)
 	}
 
 	var result model.NetboxVlan
 	err = json.Unmarshal(resBody, &result)
 	if err != nil {
-		slog.Error(err.Error())
+		slog.Error("failed to unmarshal vlan", "err", err)
 	}
 	return result
 
@@ -263,10 +262,10 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 
 	if port.Parent != "" {
 		if port.ParentId != "" {
-			if port.PortType == "physical" {
-				if port.ParentType == "virtual-switch" {
+			if port.PortType == model.TypePhysical {
+				if port.ParentType == model.TypeVirtualSwitch {
 					patchData.Bridge, _ = strconv.Atoi(port.ParentId)
-				} else if port.ParentType == "aggregate" {
+				} else if port.ParentType == model.TypeAggregate {
 					patchData.Lag, _ = strconv.Atoi(port.ParentId)
 				}
 
@@ -275,9 +274,7 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 			}
 
 		} else {
-			if !strings.HasPrefix(port.Parent, "npu") {
-				slog.Info("Parent interface does not exist yet ")
-			}
+			slog.Debug("parent interface does not exist yet", "interface", port.Name, "parent", port.Parent)
 		}
 	}
 
@@ -337,12 +334,12 @@ func (e *NetboxHTTPClient) updateInterface(port model.NetboxInterfaceUpdateCreat
 	requestURL := fmt.Sprintf("%s/%s%s/", e.baseurl, "api/dcim/interfaces/", port.InterfaceId)
 	_, err := TokenAuthHTTPPatch(requestURL, e.apikey, &e.client, data)
 	if err != nil {
-		slog.Error(err.Error())
+		slog.Error("failed to update interface", "err", err)
 	}
 
 }
 
-func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreate, netboxVlansForSite *[]model.NetboxVlan, netboxSiteId int, netboxTenantId int) {
+func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreate, netboxVlansForSite *[]model.NetboxVlan, netboxSiteId int, netboxTenantId int) model.NetboxInterface {
 	t := new(bool)
 	f := new(bool)
 
@@ -353,11 +350,11 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 	postData.Name = port.Name
 	postData.Device, _ = strconv.Atoi(port.DeviceId)
 
-	if port.PortType == "aggregate" {
+	if port.PortType == model.TypeAggregate {
 		postData.InterfaceType = "lag"
-	} else if port.PortType == "vlan" {
+	} else if port.PortType == model.TypeVlan {
 		postData.InterfaceType = "virtual"
-	} else if port.PortType == "virtual-switch" {
+	} else if port.PortType == model.TypeVirtualSwitch {
 		postData.InterfaceType = "bridge"
 	}
 
@@ -376,7 +373,7 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 		}
 	}
 
-	if port.PortType == "physical" {
+	if port.PortType == model.TypePhysical {
 		postData.InterfaceType = "1000base-t"
 	}
 
@@ -399,10 +396,10 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 
 	if port.Parent != "" {
 		if port.ParentId != "" {
-			if port.PortType == "physical" {
-				if port.ParentType == "virtual-switch" {
+			if port.PortType == model.TypePhysical {
+				if port.ParentType == model.TypeVirtualSwitch {
 					postData.Bridge, _ = strconv.Atoi(port.ParentId)
-				} else if port.ParentType == "aggregate" {
+				} else if port.ParentType == model.TypeAggregate {
 					postData.Lag, _ = strconv.Atoi(port.ParentId)
 				}
 			} else {
@@ -410,9 +407,7 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 			}
 
 		} else {
-			if !strings.HasPrefix(port.Parent, "npu") {
-				slog.Info("Parent interface does not exist yet ")
-			}
+			slog.Debug("parent interface does not exist yet", "interface", port.Name, "parent", port.Parent)
 		}
 	}
 
@@ -420,16 +415,32 @@ func (e *NetboxHTTPClient) createInterface(port model.NetboxInterfaceUpdateCreat
 
 	data, _ := json.Marshal(postData)
 	requestURL := fmt.Sprintf("%s/%s", e.baseurl, "api/dcim/interfaces/")
-	_, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
+	resBody, err := TokenAuthHTTPPost(requestURL, e.apikey, &e.client, data)
 	if err != nil {
-		slog.Error(err.Error())
-
+		slog.Error("failed to create interface", "err", err)
+		return model.NetboxInterface{}
 	}
+
+	var result model.NetboxInterface
+	if err := json.Unmarshal(resBody, &result); err != nil {
+		slog.Error("failed to unmarshal created interface", "err", err)
+	}
+	return result
 }
 
 func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces *[]model.NetboxInterfaceUpdateCreate, netboxVlansForSite *[]model.NetboxVlan, netboxSiteId int, netboxTenantId int) {
+	// Names referenced as a parent by some other interface. Any such interface
+	// must be created before its children so the child can be linked, whatever
+	// its type (a VLAN's parent can be a plain physical port, not just a LAG).
+	parentNames := make(map[string]bool)
+	for _, iface := range *interfaces {
+		if iface.Parent != "" {
+			parentNames[strings.ToLower(iface.Parent)] = true
+		}
+	}
+
+	var parentInterfaces []model.NetboxInterfaceUpdateCreate
 	var devicesWithParent []model.NetboxInterfaceUpdateCreate
-	var lagInterfaces []model.NetboxInterfaceUpdateCreate
 	var standalone []model.NetboxInterfaceUpdateCreate
 
 	for _, iface := range *interfaces {
@@ -437,16 +448,21 @@ func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces *[]model.NetboxInt
 			devicesWithParent = append(devicesWithParent, iface)
 			continue
 		}
-		if iface.PortType == "aggregate" {
-			lagInterfaces = append(lagInterfaces, iface)
+
+		if iface.PortType == model.TypeAggregate || iface.PortType == model.TypeVirtualSwitch || parentNames[strings.ToLower(iface.Name)] {
+			parentInterfaces = append(parentInterfaces, iface)
 			continue
 		}
 		standalone = append(standalone, iface)
 	}
 
-	for _, port := range lagInterfaces {
+	createdParents := make(map[string]int)
+	for _, port := range parentInterfaces {
 		if port.Mode == "create" {
-			e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
+			created := e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
+			if created.ID != 0 {
+				createdParents[strings.ToLower(port.Name)] = created.ID
+			}
 		}
 		if port.Mode == "update" {
 			e.updateInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
@@ -454,8 +470,16 @@ func (e *NetboxHTTPClient) UpdateOrCreateInferface(interfaces *[]model.NetboxInt
 	}
 
 	for _, port := range devicesWithParent {
+		if port.ParentId == "" && port.Parent != "" {
+			if id, ok := createdParents[strings.ToLower(port.Parent)]; ok {
+				port.ParentId = strconv.Itoa(id)
+			}
+		}
 		if port.Mode == "create" {
-			e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
+			created := e.createInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
+			if created.ID != 0 {
+				createdParents[strings.ToLower(port.Name)] = created.ID
+			}
 		}
 		if port.Mode == "update" {
 			e.updateInterface(port, netboxVlansForSite, netboxSiteId, netboxTenantId)
