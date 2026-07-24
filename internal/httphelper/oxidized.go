@@ -51,28 +51,26 @@ func (e *OxidizedHTTPClient) basicAuth() string {
 }
 
 
-func (e *OxidizedHTTPClient) GetNodeConfig(nodeFullname string) string {
+func (e *OxidizedHTTPClient) GetNodeConfig(nodeFullname string) (string, error) {
 	path := fmt.Sprintf("%s/%s?format=text", "node/fetch", nodeFullname)
 	resBody, err := BasicAuthHTTPGet(e.baseurl, path, e.basicAuth(), &e.client)
 	if err != nil {
-		slog.Error("Something went wrong during http request")
+		return "", err
 	}
 
-	return string(resBody)
-
-	
+	return string(resBody), nil
 }
 
 func (e *OxidizedHTTPClient) GetAllNodes() []OxidizedNode {
 	resBody, err := BasicAuthHTTPGet(e.baseurl, "nodes?format=json", e.basicAuth(), &e.client)
 	if err != nil {
-		slog.Error("Something went wrong during http request")
+		slog.Error("http request failed", "err", err)
 	}
 
-	var nodes []OxidizedNode	
-	json.Unmarshal(resBody, &nodes)
+	var nodes []OxidizedNode
+	err = json.Unmarshal(resBody, &nodes)
 	if err != nil {
-		slog.Error(fmt.Sprintf("Error: %s", err))
+		slog.Error("failed to unmarshal nodes", "err", err)
 	}
 	return nodes
 }

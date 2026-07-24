@@ -2,26 +2,6 @@ package model
 
 import "time"
 
-type FortigateInterface struct {
-	Name          string
-	Members       []string
-	Description   string
-	Status        string
-	Speed         string
-	VlanId        string
-	Parent        string
-	InterfaceType string
-}
-
-type FTOSInterface struct {
-	Name          string
-	Description   string
-	Status        bool
-	VlanId        int
-	Parent        string
-	InterfaceType string
-}
-
 type NetboxInterface struct {
 	ID      int    `json:"id"`
 	URL     string `json:"url"`

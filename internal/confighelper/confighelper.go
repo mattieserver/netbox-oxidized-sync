@@ -2,7 +2,7 @@ package confighelper
 
 import (
 	"os"
-	"log"
+	"log/slog"
 	"encoding/json"
 )
 
@@ -23,7 +23,7 @@ type Config struct {
 func ReadConfig() Config {
     f, err := os.ReadFile("configs/settings.json")
     if err != nil {
-        log.Println(err)
+        slog.Error("failed to read config", "err", err)
     }
 
     var data Config
