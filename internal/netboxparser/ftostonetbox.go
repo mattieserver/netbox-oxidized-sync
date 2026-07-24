@@ -1,5 +1,0 @@
-package netboxparser
-
-func ParseFTOSInterfaces() {
-	
-}
